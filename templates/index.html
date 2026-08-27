@@ -477,9 +477,10 @@ function groupOrderRank(name){
  const hasPlus=/\bplus\b/.test(normalized)||normalized.includes('plus');
  const hasStable=normalized.includes('稳定');
  const hasPro20=normalized.includes('pro20')||normalized.includes('pro 20')||normalized.includes('pro二十')||normalized.includes('pro 20x');
- if(hasPlus&&hasStable&&normalized.includes(','))return 0;
+ const isMixedPlusStable=hasPlus&&hasStable&&normalized.includes('号池')&&!hasPro20;
+ if(isMixedPlusStable)return 0;
  if(hasPlus&&!hasStable)return 1;
- if(hasPlus&&hasStable)return 2;
+ if(hasPlus&&hasStable&&!hasPro20)return 2;
  if(hasPro20)return 3;
  return 100;
 }
