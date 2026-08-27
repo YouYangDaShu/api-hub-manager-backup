@@ -1,0 +1,46 @@
+# 敏感数据 — 包含账号密码、Token、API Key
+data/accounts.json
+data/settings.json
+data/ratio_history.json
+data/dashboard_cache.json
+data/group_keys.json
+data/provision_mappings.json
+data/probe_profiles.json
+# 渠道映射（不含密钥，可纳入源码备份）
+# data/channel_mapping.json
+data/backups/
+data/usage_history.json
+data/usage_ledger.json
+data/site_revenue_adjustments.json
+
+# 环境变量
+.env
+.env.local
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude
+.claude/
+.plan
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 本地运行/调试残留
+server.log
+*.log
+data/dash1.json
+data/*.tmp.json
