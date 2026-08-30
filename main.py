@@ -15,6 +15,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 
 from routes import router, auto_refresh_loop
+from channel_monitor import router as channel_monitor_router, start_monitor_task
 
 DATA_DIR = Path(__file__).parent / "data"
 DATA_DIR.mkdir(exist_ok=True)
@@ -28,17 +29,23 @@ async def lifespan(app: FastAPI):
         accounts_file.write_text("[]", encoding="utf-8")
     # 后台 token 自动续期
     task = asyncio.create_task(auto_refresh_loop())
+    monitor_stop, monitor_task = await start_monitor_task()
     try:
         yield
     finally:
         task.cancel()
+        monitor_stop.set()
+        monitor_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
+        with contextlib.suppress(asyncio.CancelledError):
+            await monitor_task
 
 
 app = FastAPI(title="中转站渠道整合管理", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(router, prefix="/api")
+app.include_router(channel_monitor_router, prefix="/api")
 
 templates = Jinja2Templates(directory="templates")
 

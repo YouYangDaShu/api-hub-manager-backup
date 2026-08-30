@@ -1,9 +1,11 @@
 """后端 API 路由"""
 import asyncio
 import json
+import os
+import sqlite3
 import time
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +14,11 @@ from pydantic import BaseModel
 from services.newapi import NewAPIAdapter
 from services.sub2api import Sub2APIAdapter
 from services import capsolver, new_async_client
+from channel_monitor import (
+    COMBINATION_OPTIONS,
+    normalize_combination_order,
+    validate_combination_order,
+)
 
 router = APIRouter()
 DATA_DIR = Path(__file__).parent / "data"
@@ -49,6 +56,14 @@ class SettingsUpdate(BaseModel):
     hub_password: str | None = None
     hub_api_key: str | None = None  # 可选：Admin x-api-key，优先于邮箱密码
     ultra_low_rate: float | None = None  # 超低价阈值，低于此倍率为超低价
+    show_channel_groups: bool | None = None
+    show_consumption_chart: bool | None = None
+    show_ratio_table: bool | None = None
+    show_today_dataset: bool | None = None
+    show_total_dataset: bool | None = None
+    mask_channel_urls: bool | None = None
+    group_filter_keyword: str | None = None
+    channel_combination_order: list[str] | None = None
 
 
 # === 数据持久化 ===
@@ -83,6 +98,23 @@ _cache: dict[str, dict[str, Any]] = {}
 DASHBOARD_DISK_CACHE = DATA_DIR / "dashboard_cache.json"
 USAGE_HISTORY_FILE = DATA_DIR / "usage_history.json"
 USAGE_LEDGER_FILE = DATA_DIR / "usage_ledger.json"
+SITE_BILLING_DB = Path(os.environ.get("NEWAPI_DB", "/home/youyang/projects/services/new-api/data/one-api.db"))
+SITE_REVENUE_ADJUSTMENTS = DATA_DIR / "site_revenue_adjustments.json"
+CHANNEL_OWNERSHIP_FILE = Path(os.environ.get("CHANNEL_OWNERSHIP_FILE", str(DATA_DIR / "channel_ownership.json")))
+# 生产 New API 中已核对过归属的多渠道账号。只保存 channel_id，不保存任何 API key。
+SITE_CHANNEL_IDS_BY_ACCOUNT = {
+    "926d2a81": (63, 64, 73),       # 莫比乌斯（2chat 同一登录账号，含 chat2api）
+    "f6506b67": (89, 97, 103),      # 板栗（banliapi.top 同一登录账号）
+    "2734859e": (95, 102, 104),     # coco（sub-coco.org，含 coco 自建/PRO）
+    "bb065c1c": (79,),               # 凉介（dreamaitoken.cloud，含 plus 稳定）
+    "7d5b654c": (46, 98, 107),          # DC（GPT + AWS-Claude-High + AWS-Claude；107 为旧 GPT 渠道重建后的新 ID）
+    "d8d50eee": (87, 106),          # SY（mxamaxai.com，含 sy 小铺 PRO）
+    "b0d14b19": (56,),          # 汇流副号（304...）
+    "ebd3907b": (29,),               # 词元（mathmodel pro）
+    "100de40f": (92,),               # 蛋炒饭（proxygpt.cc.cd）
+    "2212f6bb": (101,),              # Jay（同一公网站）
+    "6d0226c3": (71,),          # 汇流主号（197...，多 Key 渠道）
+}
 
 CACHE_TTL_DASHBOARD = 300  # 仪表盘缓存 5 分钟
 CACHE_TTL_ACCOUNT = 180    # 单个账号缓存 3 分钟
@@ -183,6 +215,18 @@ def _attach_usage_ledger(account_summaries: list[dict[str, Any]]) -> None:
             "last_upstream_total": None,
             "reset_count": 0,
         })
+        # 汇流和词元的上游 total_cost 会周期性重置；这里不再把重置前历史继续叠加到当前值。
+        # 这些账号的累计消费口径以当前上游 used_quota 为准，避免刷新一次就再次累加旧账。
+        if account_id in {"b0d14b19", "6d0226c3", "ebd3907b"}:
+            row["total_cost"] = round(upstream_value, 4)
+            row["last_upstream_total"] = upstream_value
+            row["last_seen_at"] = int(time.time())
+            row["reset_count"] = 0
+            row["baseline_source"] = "upstream_used_quota_current"
+            summary["total_cost"] = round(upstream_value, 4)
+            changed = True
+            continue
+
         local_total = max(0.0, float(row.get("total_cost", 0.0) or 0.0))
         financial = summary.get("financial_baseline") or {}
         if financial.get("total_recharged") is not None and financial.get("balance") is not None:
@@ -270,9 +314,313 @@ def _attach_usage_history(account_summaries: list[dict[str, Any]]) -> None:
     except OSError:
         pass
 
-
 # 模块导入时立刻尝试加载磁盘缓存
 _load_dashboard_disk_cache()
+
+
+def _load_revenue_adjustments() -> dict[str, dict[str, Any]]:
+    if not SITE_REVENUE_ADJUSTMENTS.exists():
+        return {}
+    try:
+        data = json.loads(SITE_REVENUE_ADJUSTMENTS.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (json.JSONDecodeError, OSError, TypeError):
+        return {}
+
+
+def _load_channel_ownership() -> dict[str, dict[str, Any]]:
+    """Load manual channel ownership without ever persisting credentials."""
+    if not CHANNEL_OWNERSHIP_FILE.exists():
+        return {}
+    try:
+        raw = json.loads(CHANNEL_OWNERSHIP_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, TypeError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[str, dict[str, Any]] = {}
+    for channel_id, value in raw.items():
+        if not isinstance(value, dict):
+            continue
+        owner = str(value.get("owner_account_id") or "").strip()
+        if not owner:
+            continue
+        source = str(value.get("source") or "manual")
+        if source not in {"manual", "channel_id", "upstream_key"}:
+            source = "manual"
+        result[str(channel_id)] = {
+            "channel_id": str(channel_id),
+            "owner_account_id": owner,
+            "updated_at": str(value.get("updated_at") or ""),
+            "source": source,
+        }
+    return result
+
+
+def _save_channel_ownership(data: dict[str, dict[str, Any]]) -> None:
+    CHANNEL_OWNERSHIP_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary = CHANNEL_OWNERSHIP_FILE.with_suffix(".json.tmp")
+    # Explicit allow-list prevents accidental key/token/password persistence.
+    safe = {
+        str(channel_id): {
+            "channel_id": str(channel_id),
+            "owner_account_id": str(value.get("owner_account_id") or ""),
+            "updated_at": str(value.get("updated_at") or ""),
+            "source": (str(value.get("source")) if value.get("source") in {"manual", "channel_id", "upstream_key"} else "manual"),
+        }
+        for channel_id, value in data.items()
+        if isinstance(value, dict) and str(value.get("owner_account_id") or "").strip()
+    }
+    temporary.write_text(json.dumps(safe, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(CHANNEL_OWNERSHIP_FILE)
+
+
+def get_channel_ownership(channel_id: int | str) -> dict[str, Any] | None:
+    """Return safe manual ownership metadata for a channel."""
+    return _load_channel_ownership().get(str(channel_id))
+
+
+def _account_names() -> dict[str, str]:
+    return {str(a.get("id")): str(a.get("name") or a.get("id")) for a in _load_accounts()}
+
+
+def list_channel_ownership() -> list[dict[str, Any]]:
+    names = _account_names()
+    result = []
+    for item in _load_channel_ownership().values():
+        row = dict(item)
+        row["owner_account_name"] = names.get(str(row["owner_account_id"]), "")
+        row["owner_exists"] = str(row["owner_account_id"]) in names
+        result.append(row)
+    return sorted(result, key=lambda x: (0, int(x["channel_id"])) if str(x["channel_id"]).isdigit() else (1, str(x["channel_id"])))
+
+
+def set_channel_ownership(channel_id: int | str, owner_account_id: str, source: str = "manual") -> dict[str, Any]:
+    owner_account_id = str(owner_account_id or "").strip()
+    if not owner_account_id or owner_account_id not in _account_names():
+        raise HTTPException(status_code=400, detail="归属账号不存在")
+    try:
+        normalized_channel_id = str(int(channel_id))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="channel_id 必须是整数")
+    source = source if source in {"manual", "channel_id", "upstream_key"} else "manual"
+    data = _load_channel_ownership()
+    data[normalized_channel_id] = {
+        "channel_id": normalized_channel_id,
+        "owner_account_id": owner_account_id,
+        "updated_at": datetime.now().astimezone().isoformat(),
+        "source": source,
+    }
+    _save_channel_ownership(data)
+    _cache_invalidate("dashboard")
+    return data[normalized_channel_id]
+
+
+def clear_channel_ownership(channel_id: int | str) -> bool:
+    normalized_channel_id = str(int(channel_id))
+    data = _load_channel_ownership()
+    existed = normalized_channel_id in data
+    data.pop(normalized_channel_id, None)
+    _save_channel_ownership(data)
+    _cache_invalidate("dashboard")
+    return existed
+
+
+@router.get("/channel-ownership")
+async def get_channel_ownership_api():
+    return {"success": True, "data": list_channel_ownership()}
+
+
+@router.get("/channel-ownership/{channel_id}")
+async def get_one_channel_ownership_api(channel_id: int):
+    item = get_channel_ownership(channel_id)
+    if item:
+        item = dict(item)
+        item["owner_account_name"] = _account_names().get(str(item["owner_account_id"]), "")
+        item["owner_exists"] = str(item["owner_account_id"]) in _account_names()
+    return {"success": True, "data": item}
+
+
+@router.put("/channel-ownership/{channel_id}")
+async def put_channel_ownership(channel_id: int, payload: dict[str, Any]):
+    owner = payload.get("owner_account_id")
+    if owner in (None, ""):
+        clear_channel_ownership(channel_id)
+        return {"success": True, "data": None}
+    return {"success": True, "data": set_channel_ownership(channel_id, str(owner), "manual")}
+
+
+@router.delete("/channel-ownership/{channel_id}")
+async def delete_channel_ownership(channel_id: int):
+    clear_channel_ownership(channel_id)
+    return {"success": True}
+
+
+def _attach_site_revenue(account_summaries: list[dict[str, Any]]) -> dict[str, float | None]:
+    """Attach site revenue using one owner per billing channel.
+
+    Manual channel ownership is authoritative. Automatic attribution only uses
+    the historical channel-id map or an unambiguous exact upstream key match.
+    """
+    for summary in account_summaries:
+        summary["site_revenue"] = None
+        summary["site_revenue_total"] = None
+        summary["site_profit"] = None
+        summary["site_profit_total"] = None
+        summary["site_revenue_status"] = "未归属/待设置"
+        summary["site_revenue_attributed"] = False
+        summary["site_channel_ids"] = []
+        summary["site_owner_source"] = None
+
+    empty_totals = {"today_revenue": None, "total_revenue": None}
+    if not SITE_BILLING_DB.exists():
+        for summary in account_summaries:
+            summary["site_revenue_status"] = "收入库不可用"
+        return empty_totals
+
+    try:
+        local_now = datetime.now().astimezone()
+        start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + timedelta(days=1)
+        with sqlite3.connect(f"file:{SITE_BILLING_DB}?mode=ro", uri=True) as conn:
+            qpu_row = conn.execute("SELECT value FROM options WHERE key = 'QuotaPerUnit'").fetchone()
+            qpu = float(qpu_row[0]) if qpu_row and float(qpu_row[0]) > 0 else 500000.0
+            rows = conn.execute(
+                """
+                SELECT c.id, c.key,
+                    COALESCE(SUM(CASE WHEN l.created_at >= ? AND l.created_at < ? THEN l.quota ELSE 0 END), 0),
+                    COALESCE(SUM(l.quota), 0)
+                FROM logs l JOIN channels c ON c.id = l.channel_id
+                WHERE l.type = 2 AND l.quota > 0
+                GROUP BY c.id, c.key
+                """,
+                (int(start.timestamp()), int(end.timestamp())),
+            ).fetchall()
+    except (OSError, sqlite3.Error, TypeError, ValueError):
+        for summary in account_summaries:
+            summary["site_revenue_status"] = "收入读取失败"
+        return empty_totals
+
+    def amount(value: Any) -> float:
+        return max(0.0, float(value or 0)) / qpu
+
+    revenue_by_channel = {
+        int(channel_id): {"key": str(key or ""), "today": amount(today), "total": amount(total)}
+        for channel_id, key, today, total in rows
+    }
+    revenue_adjustments = _load_revenue_adjustments()
+    accounts_by_id = {str(s.get("id")): s for s in account_summaries}
+    manual = _load_channel_ownership()
+    static_reverse: dict[int, list[str]] = {}
+    for account_id, channel_ids in SITE_CHANNEL_IDS_BY_ACCOUNT.items():
+        if account_id not in accounts_by_id:
+            continue
+        for channel_id in channel_ids:
+            static_reverse.setdefault(int(channel_id), []).append(account_id)
+    key_reverse: dict[str, list[str]] = {}
+    for summary in account_summaries:
+        key = str(summary.get("upstream_key") or "").strip()
+        if key:
+            key_reverse.setdefault(key, []).append(str(summary.get("id")))
+
+    amounts_by_account: dict[str, list[float]] = {
+        str(s.get("id")): [0.0, 0.0] for s in account_summaries
+    }
+    channels_by_account: dict[str, list[int]] = {key: [] for key in amounts_by_account}
+    source_by_account: dict[str, set[str]] = {key: set() for key in amounts_by_account}
+    assigned_channel_ids: set[int] = set()
+    for channel_id, revenue in revenue_by_channel.items():
+        manual_item = manual.get(str(channel_id))
+        owner_id = None
+        source = None
+        if manual_item:
+            candidate = str(manual_item.get("owner_account_id") or "")
+            # A stale manual entry must not silently fall back to another account.
+            if candidate in accounts_by_id:
+                owner_id, source = candidate, "manual"
+        if owner_id is None and not manual_item:
+            static_candidates = list(dict.fromkeys(static_reverse.get(channel_id, [])))
+            if len(static_candidates) == 1:
+                owner_id, source = static_candidates[0], "channel_id"
+            else:
+                key_candidates = list(dict.fromkeys(key_reverse.get(revenue["key"], []))) if revenue["key"] else []
+                if len(key_candidates) == 1:
+                    owner_id, source = key_candidates[0], "upstream_key"
+        if owner_id is None:
+            continue
+        assigned_channel_ids.add(channel_id)
+        amounts_by_account[owner_id][0] += revenue["today"]
+        amounts_by_account[owner_id][1] += revenue["total"]
+        channels_by_account[owner_id].append(channel_id)
+        source_by_account[owner_id].add(source or "unknown")
+
+    matched_today = 0.0
+    matched_total = 0.0
+    matched_today_cost = 0.0
+    matched_total_cost = 0.0
+    for summary in account_summaries:
+        account_id = str(summary.get("id") or "")
+        today, total = amounts_by_account.get(account_id, [0.0, 0.0])
+        channel_ids = sorted(set(channels_by_account.get(account_id, [])))
+        sources = source_by_account.get(account_id, set())
+        adjustment = revenue_adjustments.get(account_id) or {}
+        manual_total = max(0.0, float(adjustment.get("historical_revenue", 0) or 0))
+        total += manual_total
+        attributed = bool(channel_ids or manual_total)
+        if attributed:
+            if "manual" in sources:
+                match_status = "已按手动归属匹配"
+            elif "channel_id" in sources:
+                match_status = f"已按本站渠道ID匹配 {len(SITE_CHANNEL_IDS_BY_ACCOUNT.get(account_id, channel_ids))} 条"
+            elif "upstream_key" in sources:
+                match_status = "已按上游Key匹配"
+            else:
+                match_status = "已归属"
+            if manual_total:
+                match_status += " + 历史补账"
+        else:
+            # An explicitly configured key with no billing rows is a known
+            # account with zero revenue; an account without a key remains
+            # unowned so its cost cannot become a fake negative profit.
+            key_value = str(summary.get("upstream_key") or "").strip()
+            key_candidates = key_reverse.get(key_value, []) if key_value else []
+            billing_keys = {row["key"] for row in revenue_by_channel.values() if row["key"]}
+            has_known_zero = bool(key_value) and key_value not in billing_keys
+            match_status = "已匹配，今日无本站收入" if has_known_zero else "未归属/待设置"
+            if has_known_zero:
+                attributed = True
+        summary["site_revenue"] = round(today, 4) if attributed else None
+        summary["site_revenue_total"] = round(total, 4) if attributed else None
+        summary["site_revenue_attributed"] = attributed
+        summary["site_channel_ids"] = channel_ids
+        summary["site_owner_source"] = ("manual" if "manual" in sources else next(iter(sources), None))
+        today_cost = summary.get("today_cost")
+        total_cost = summary.get("total_cost")
+        summary["site_profit"] = round(today - float(today_cost), 4) if attributed and today_cost is not None else None
+        summary["site_profit_total"] = round(total - float(total_cost), 4) if attributed and total_cost is not None else None
+        summary["site_revenue_status"] = match_status
+        if attributed:
+            matched_today += today
+            matched_total += total
+            if summary.get("today_cost") is not None:
+                matched_today_cost += max(0.0, float(summary["today_cost"] or 0))
+            if summary.get("total_cost") is not None:
+                matched_total_cost += max(0.0, float(summary["total_cost"] or 0))
+
+    # 顶部收入必须和 Hub 渠道成本使用同一归属集合，避免把未归属流水算进利润。
+    return {"today_revenue": round(matched_today, 4),
+            "total_revenue": round(matched_total, 4),
+            "site_today_revenue": round(sum(amount(row[2]) for row in rows), 4),
+            "site_total_revenue": round(sum(amount(row[3]) for row in rows), 4),
+            "matched_today": round(matched_today, 4),
+            "matched_total": round(matched_total, 4),
+            "attributed_today_cost": round(matched_today_cost, 4),
+            "attributed_total_cost": round(matched_total_cost, 4),
+            "unmatched_channel_ids": sorted(set(revenue_by_channel) - assigned_channel_ids)}
+
+
+# === 账号管理 ===
+
 
 def _get_adapter(account: dict):
     """根据平台类型获取对应的适配器"""
@@ -289,7 +637,7 @@ def _get_adapter(account: dict):
         adapter = NewAPIAdapter(base_url, token, credential_type=cred_type)
         if account.get("user_id"):
             adapter.user_id = account["user_id"]
-        return adapter
+    return adapter
 
 
 # 单渠道整体拉取超时上限（秒）：防止某个挂掉/极慢的中转站拖垮整个仪表盘
@@ -307,6 +655,7 @@ async def _account_summary(account: dict) -> dict[str, Any]:
         "id": account["id"], "name": account["name"], "platform": account["platform"],
         "base_url": account["base_url"], "recharge_ratio": rr,
         "credential_type": account.get("credential_type", "token"),
+        "upstream_key": account.get("upstream_key", ""),
         # 渠道级上游 Key（不含分组级）；分组级在扫描时再判
         "has_upstream_key": bool(_looks_like_api_key(account.get("upstream_key", "") or "")),
     }
@@ -813,6 +1162,9 @@ async def _build_dashboard(force_snapshot: bool = False) -> dict[str, Any]:
     ))
     _attach_usage_ledger(account_summaries)
     _attach_usage_history(account_summaries)
+    revenue_totals = _attach_site_revenue(account_summaries)
+    for summary in account_summaries:
+        summary.pop("upstream_key", None)
 
     for s in account_summaries:
         # 注意：余额/消耗为 0 是合法值，不能用 truthy 判断
@@ -838,6 +1190,18 @@ async def _build_dashboard(force_snapshot: bool = False) -> dict[str, Any]:
         "total_balance": round(total_balance, 4),
         "today_cost": round(today_cost, 4),
         "total_cost": round(total_cost, 4),
+        "today_revenue": revenue_totals.get("site_today_revenue"),
+        "total_revenue": revenue_totals.get("site_total_revenue"),
+        "attributed_today_revenue": revenue_totals.get("matched_today"),
+        "attributed_total_revenue": revenue_totals.get("matched_total"),
+        "attributed_today_cost": revenue_totals.get("attributed_today_cost"),
+        "attributed_total_cost": revenue_totals.get("attributed_total_cost"),
+        "unmatched_today_revenue": round(
+            (revenue_totals.get("site_today_revenue") or 0) - (revenue_totals.get("matched_today") or 0), 4
+        ),
+        "unmatched_total_revenue": round(
+            (revenue_totals.get("site_total_revenue") or 0) - (revenue_totals.get("matched_total") or 0), 4
+        ),
         "account_count": len(accounts),
         "error_count": error_count,
         "accounts": account_summaries,
@@ -866,6 +1230,26 @@ async def dashboard(force: bool = Query(False, description="强制刷新，忽�
         cached = _cache.get(cache_key, {}).get("data")
         if cached and cached.get("accounts") is not None and not cached.get("empty"):
             out = dict(cached)
+            account_keys = {str(a.get("id")): a.get("upstream_key", "") for a in _load_accounts()}
+            cached_accounts = [dict(a) for a in out.get("accounts", [])]
+            for account in cached_accounts:
+                account["upstream_key"] = account_keys.get(str(account.get("id")), "")
+            cached_revenue_totals = _attach_site_revenue(cached_accounts)
+            for account in cached_accounts:
+                account.pop("upstream_key", None)
+            out["accounts"] = cached_accounts
+            out["today_revenue"] = cached_revenue_totals.get("site_today_revenue")
+            out["total_revenue"] = cached_revenue_totals.get("site_total_revenue")
+            out["attributed_today_revenue"] = cached_revenue_totals.get("matched_today")
+            out["attributed_total_revenue"] = cached_revenue_totals.get("matched_total")
+            out["attributed_today_cost"] = cached_revenue_totals.get("attributed_today_cost")
+            out["attributed_total_cost"] = cached_revenue_totals.get("attributed_total_cost")
+            out["unmatched_today_revenue"] = round(
+                (cached_revenue_totals.get("site_today_revenue") or 0) - (cached_revenue_totals.get("matched_today") or 0), 4
+            )
+            out["unmatched_total_revenue"] = round(
+                (cached_revenue_totals.get("site_total_revenue") or 0) - (cached_revenue_totals.get("matched_total") or 0), 4
+            )
             out["from_cache"] = True
             out["refreshing"] = _refreshing
             return {"success": True, "data": out}
@@ -919,6 +1303,7 @@ async def dashboard_status():
 async def get_settings():
     """获取系统设置"""
     settings = _load_settings()
+    combination_order = normalize_combination_order(settings.get("channel_combination_order"))
     cs_key = settings.get("capsolver_api_key", "")
     masked = ""
     if cs_key:
@@ -943,6 +1328,15 @@ async def get_settings():
             "hub_api_key_set": bool(hub_key),
             "hub_api_key_masked": hub_key_masked,
             "ultra_low_rate": settings.get("ultra_low_rate", 0.6),
+            "show_channel_groups": settings.get("show_channel_groups", True),
+            "show_consumption_chart": settings.get("show_consumption_chart", True),
+            "show_ratio_table": settings.get("show_ratio_table", True),
+            "show_today_dataset": settings.get("show_today_dataset", True),
+            "show_total_dataset": settings.get("show_total_dataset", True),
+            "mask_channel_urls": settings.get("mask_channel_urls", False),
+            "group_filter_keyword": settings.get("group_filter_keyword", ""),
+            "channel_combination_order": combination_order,
+            "channel_combination_options": list(COMBINATION_OPTIONS),
         },
     }
 
@@ -963,6 +1357,24 @@ async def update_settings(req: SettingsUpdate):
         settings["hub_api_key"] = req.hub_api_key
     if req.ultra_low_rate is not None:
         settings["ultra_low_rate"] = req.ultra_low_rate
+    for key in (
+        "show_channel_groups",
+        "show_consumption_chart",
+        "show_ratio_table",
+        "show_today_dataset",
+        "show_total_dataset",
+        "mask_channel_urls",
+    ):
+        value = getattr(req, key)
+        if value is not None:
+            settings[key] = value
+    if req.group_filter_keyword is not None:
+        settings["group_filter_keyword"] = req.group_filter_keyword.strip()[:64]
+    if req.channel_combination_order is not None:
+        try:
+            settings["channel_combination_order"] = validate_combination_order(req.channel_combination_order)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     _save_settings(settings)
     return {"success": True, "message": "设置已保存"}
 

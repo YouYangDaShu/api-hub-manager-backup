@@ -29,6 +29,42 @@ ADMIN_TOKEN = os.getenv("CHANNEL_MONITOR_TOKEN", "")
 DEFAULT_MONITOR_MODEL = "gpt-5.6-terra"
 router = APIRouter(prefix="/channel-monitor", tags=["channel-monitor"])
 
+# Stable keys are persisted in data/settings.json; labels are presentation-only.
+COMBINATION_OPTIONS: tuple[dict[str, str], ...] = (
+    {"key": "pro_stable", "label": "Pro + 稳定"},
+    {"key": "pro_stable_p20", "label": "Pro + 稳定 + P20"},
+    {"key": "pro_stable_mixed", "label": "其他 Pro + 稳定混合"},
+    {"key": "stable", "label": "稳定"},
+    {"key": "plus", "label": "Plus"},
+    {"key": "p20", "label": "P20"},
+    {"key": "other", "label": "其他"},
+)
+DEFAULT_COMBINATION_ORDER: tuple[str, ...] = tuple(x["key"] for x in COMBINATION_OPTIONS)
+COMBINATION_LABELS = {x["key"]: x["label"] for x in COMBINATION_OPTIONS}
+
+
+def normalize_combination_order(value: Any) -> list[str]:
+    """Return the default order unless a stored value is a complete valid order."""
+    if not isinstance(value, list) or len(value) != len(DEFAULT_COMBINATION_ORDER):
+        return list(DEFAULT_COMBINATION_ORDER)
+    if any(not isinstance(x, str) for x in value) or len(set(value)) != len(value):
+        return list(DEFAULT_COMBINATION_ORDER)
+    if set(value) != set(DEFAULT_COMBINATION_ORDER):
+        return list(DEFAULT_COMBINATION_ORDER)
+    return list(value)
+
+
+def validate_combination_order(value: Any) -> list[str]:
+    """Validate a submitted order and append omitted known categories."""
+    if not isinstance(value, list) or any(not isinstance(x, str) for x in value):
+        raise ValueError("channel_combination_order 必须是字符串数组")
+    known = set(DEFAULT_COMBINATION_ORDER)
+    if any(x not in known for x in value):
+        raise ValueError("channel_combination_order 包含未知类别")
+    if len(set(value)) != len(value):
+        raise ValueError("channel_combination_order 不允许重复类别")
+    return value + [x for x in DEFAULT_COMBINATION_ORDER if x not in value]
+
 def db_connect(read_only: bool = True) -> sqlite3.Connection:
     if read_only:
         return sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
@@ -78,6 +114,75 @@ def channel_row(row: tuple[Any, ...]) -> dict[str, Any]:
     item["status_label"] = "启用" if item["enabled"] else "停用"
     item["models"] = [x.strip() for x in str(item.get("models") or "").split(",") if x.strip()]
     return item
+
+
+def classify_combination(item: dict[str, Any]) -> str:
+    """Return a stable combination key from channel metadata."""
+    text = " ".join([
+        str(item.get("group", "")), str(item.get("name", "")),
+        " ".join(item.get("models", []) or []), str(item.get("test_model", "")),
+    ]).lower()
+    stable = "稳定" in text or bool(re.search(r"\bstable\b", text))
+    plus = bool(re.search(r"\bplus\b", text))
+    p20 = bool(re.search(r"(?:\bp20\b|pro20x)", text))
+    mixed = bool(re.search(r"(?:\bmix(?:ed)?\b|混合)", text))
+    # \bpro\b recognizes GPT-PRO and Chinese-separated "pro" but not profile.
+    pro = bool(re.search(r"\bpro\b", text)) or bool(re.search(r"pro20x", text))
+    if pro and stable and p20 and not plus:
+        return "pro_stable_p20"
+    if pro and stable and (plus or p20 or mixed):
+        return "pro_stable_mixed"
+    if pro and stable:
+        return "pro_stable"
+    if stable:
+        return "stable"
+    if plus:
+        return "plus"
+    if p20:
+        return "p20"
+    return "other"
+
+
+def channel_combination_rank(item: dict[str, Any], order: list[str] | None = None) -> int:
+    """Return the one-based position used by API and UI sorting."""
+    effective_order = order or list(DEFAULT_COMBINATION_ORDER)
+    key = classify_combination(item)
+    try:
+        return effective_order.index(key) + 1
+    except ValueError:
+        return len(effective_order) + 1
+
+
+def get_combination_order() -> list[str]:
+    """Read the persisted order without importing routes at module load time."""
+    try:
+        from routes import _load_settings
+        return normalize_combination_order(_load_settings().get("channel_combination_order"))
+    except Exception:
+        return list(DEFAULT_COMBINATION_ORDER)
+
+
+def _safe_owner_metadata(channel_id: int) -> dict[str, Any]:
+    try:
+        from routes import get_channel_ownership, _account_names, SITE_CHANNEL_IDS_BY_ACCOUNT
+        item = get_channel_ownership(channel_id)
+        if not item:
+            static = [str(account_id) for account_id, ids in SITE_CHANNEL_IDS_BY_ACCOUNT.items() if channel_id in ids]
+            if len(static) == 1:
+                names = _account_names()
+                if static[0] in names:
+                    return {"owner_account_id": static[0], "owner_account_name": names.get(static[0]), "owner_source": "channel_id", "source": "channel_id"}
+            return {"owner_account_id": None, "owner_account_name": None, "owner_source": None, "source": None}
+        owner_id = str(item.get("owner_account_id") or "")
+        return {
+            "owner_account_id": owner_id or None,
+            "owner_account_name": _account_names().get(owner_id) if owner_id else None,
+            "owner_source": item.get("source") or "manual",
+            "source": item.get("source") or "manual",
+            "owner_updated_at": item.get("updated_at") or None,
+        }
+    except Exception:
+        return {"owner_account_id": None, "owner_account_name": None, "owner_source": None, "source": None}
 
 
 def history_since(history: list[dict[str, Any]], cutoff: datetime) -> list[dict[str, Any]]:
@@ -180,6 +285,7 @@ def list_channels() -> list[dict[str, Any]]:
         con.close()
     state = load_state()
     now = datetime.now().astimezone()
+    combination_order = get_combination_order()
     result = []
     for row in rows:
         item = channel_row(row)
@@ -198,8 +304,16 @@ def list_channels() -> list[dict[str, Any]]:
         item["monitor_global_enabled"] = get_monitor_global_enabled(state)
         item["category"] = classify_channel(item)
         item["category_enabled"] = get_category_enabled(item["category"], state)
+        item["combination_key"] = classify_combination(item)
+        item["combination_rank"] = channel_combination_rank(item, combination_order)
+        item.update(_safe_owner_metadata(int(item["id"])))
         result.append(item)
-    return result
+    return sorted(result, key=lambda x: (
+        int(x.get("combination_rank", len(combination_order) + 1)),
+        -int(x.get("priority") or 0),
+        str(x.get("name") or "").casefold(),
+        int(x.get("id") or 0),
+    ))
 
 
 def run_check(channel: dict[str, Any]) -> dict[str, Any]:
@@ -289,6 +403,16 @@ def channels(x_channel_monitor_token: str | None = Header(default=None), authori
     return {"ok": True, "channels": list_channels()}
 
 
+@router.get("/owners")
+def owners(x_channel_monitor_token: str | None = Header(default=None), authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    check_token(token_value(x_channel_monitor_token, authorization))
+    try:
+        from routes import _account_names
+        return {"ok": True, "owners": [{"id": key, "name": name} for key, name in _account_names().items()]}
+    except Exception:
+        return {"ok": True, "owners": []}
+
+
 @router.get("/test/{channel_id}")
 def test_channel(channel_id: int, x_channel_monitor_token: str | None = Header(default=None), authorization: str | None = Header(default=None)) -> dict[str, Any]:
     check_token(token_value(x_channel_monitor_token, authorization))
@@ -332,6 +456,25 @@ async def monitor_model(channel_id: int, payload: dict[str, Any], x_channel_moni
     return {"ok": True, "model": model}
 
 
+@router.put("/channels/{channel_id}/owner")
+def set_channel_owner(channel_id: int, payload: dict[str, Any], x_channel_monitor_token: str | None = Header(default=None), authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    check_token(token_value(x_channel_monitor_token, authorization))
+    from routes import clear_channel_ownership, set_channel_ownership
+    owner = payload.get("owner_account_id")
+    if owner in (None, ""):
+        clear_channel_ownership(channel_id)
+        return {"ok": True, "owner_account_id": None}
+    return {"ok": True, **set_channel_ownership(channel_id, str(owner), "manual")}
+
+
+@router.delete("/channels/{channel_id}/owner")
+def clear_channel_owner(channel_id: int, x_channel_monitor_token: str | None = Header(default=None), authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    check_token(token_value(x_channel_monitor_token, authorization))
+    from routes import clear_channel_ownership
+    clear_channel_ownership(channel_id)
+    return {"ok": True, "owner_account_id": None}
+
+
 @router.post("/channels/{channel_id}/toggle")
 def production_toggle(channel_id: int, payload: dict[str, Any], x_channel_monitor_token: str | None = Header(default=None), authorization: str | None = Header(default=None)) -> dict[str, Any]:
     check_token(token_value(x_channel_monitor_token, authorization))
@@ -355,6 +498,11 @@ def add_channel(payload: dict[str, Any], x_channel_monitor_token: str | None = H
     key = str(payload.get("key", "")).strip()
     if not name or not base or not key or not base.startswith(("http://", "https://")):
         raise HTTPException(status_code=400, detail="名称、上游地址和 Key 必填")
+    owner_id = str(payload.get("owner_account_id") or "").strip()
+    if owner_id:
+        from routes import _account_names
+        if owner_id not in _account_names():
+            raise HTTPException(status_code=400, detail="归属账号不存在")
     models = ",".join(str(payload.get("models", "")).split(","))
     con = db_connect(False)
     try:
@@ -363,9 +511,52 @@ def add_channel(payload: dict[str, Any], x_channel_monitor_token: str | None = H
             (1, key, name, 1, 1, base, models, str(payload.get("group", "default")), int(payload.get("priority", 0)), 1, str(payload.get("test_model", ""))),
         )
         con.commit()
+        if owner_id:
+            from routes import set_channel_ownership
+            set_channel_ownership(cur.lastrowid, owner_id, "manual")
         return {"ok": True, "id": cur.lastrowid}
     finally:
         con.close()
+
+
+@router.patch("/channels/{channel_id}")
+def edit_channel(channel_id: int, payload: dict[str, Any], x_channel_monitor_token: str | None = Header(default=None), authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    check_token(token_value(x_channel_monitor_token, authorization))
+    allowed = {"name": "name", "base_url": "base_url", "models": "models", "group": '"group"', "priority": "priority", "test_model": "test_model"}
+    updates, values = [], []
+    for key, column in allowed.items():
+        if key not in payload:
+            continue
+        value = payload[key]
+        if key == "models":
+            value = ",".join(str(value).split(","))
+        if key == "priority":
+            try:
+                value = int(value)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="priority 必须是整数")
+        updates.append(f"{column}=?")
+        values.append(value)
+    con = db_connect(False)
+    try:
+        if updates:
+            values.append(channel_id)
+            cur = con.execute(f"UPDATE channels SET {','.join(updates)} WHERE id=?", values)
+            if cur.rowcount != 1:
+                raise HTTPException(status_code=404, detail="渠道不存在")
+            con.commit()
+        elif not con.execute("SELECT 1 FROM channels WHERE id=?", (channel_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="渠道不存在")
+    finally:
+        con.close()
+    if "owner_account_id" in payload:
+        from routes import clear_channel_ownership, set_channel_ownership
+        owner = payload.get("owner_account_id")
+        if owner in (None, ""):
+            clear_channel_ownership(channel_id)
+        else:
+            set_channel_ownership(channel_id, str(owner), "manual")
+    return {"ok": True, "id": channel_id}
 
 
 async def monitor_loop(stop_event: asyncio.Event) -> None:

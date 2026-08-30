@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="light dark">
-    <title>API Hub Manager · 中转站渠道整合管理</title>
-    <link rel="stylesheet" href="static/style.css?v=20260823-6">
+    <title>幽羊 API · 中转站渠道整合管理</title>
+    <link rel="stylesheet" href="static/style.css?v=20260829-1">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
     <script>
         // Apply theme before paint to avoid flash
@@ -25,15 +25,16 @@
     <header class="header">
         <div class="header-inner">
             <div class="logo">
-                <div class="logo-icon" aria-hidden="true">⚡</div>
+                <div class="logo-icon" aria-hidden="true">幽</div>
                 <div>
-                    <div class="logo-text">API Hub Manager</div>
-                    <div class="logo-sub">中转站渠道整合管理</div>
+                    <div class="logo-text">幽羊 API</div>
+                    <div class="logo-sub">智能中转站管理</div>
                 </div>
             </div>
             <div class="header-right">
                 <nav class="nav" role="tablist" aria-label="主导航">
                     <button class="nav-btn active" data-page="dashboard" role="tab" aria-selected="true">仪表盘</button>
+                    <button class="nav-btn" data-page="channel-monitor" role="tab" aria-selected="false">渠道可用性</button>
                     <button class="nav-btn" data-page="add" role="tab" aria-selected="false">添加渠道</button>
                     <button class="nav-btn" data-page="scanner" role="tab" aria-selected="false">扫描器</button>
                     <button class="nav-btn" data-page="probe" role="tab" aria-selected="false">探活</button>
@@ -94,6 +95,42 @@
                 <span id="footerClock"></span>
             </div>
         </section>
+
+
+        <!-- CHANNEL_MODULE_RAW_START -->
+        {% raw %}
+        <section id="page-channel-monitor" class="page" role="tabpanel" aria-label="渠道可用性">
+            <style>
+#page-channel-monitor{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--text);background:radial-gradient(1200px 500px at 10% -10%,rgba(79,70,229,.08),transparent 55%),radial-gradient(900px 400px at 90% 0%,rgba(139,92,246,.07),transparent 50%),var(--bg);--blue:#007aff;--green:#34c759;--red:#ff3b30;--amber:#ff9500;--line:var(--border)}#page-channel-monitor *{box-sizing:border-box}#page-channel-monitor{margin:0}#page-channel-monitor .shell{max-width:1440px;margin:auto;padding:28px 32px}#page-channel-monitor .top{display:flex;justify-content:space-between;align-items:end;margin-bottom:22px}#page-channel-monitor .eyebrow{font-size:12px;color:#7c8798;text-transform:uppercase;letter-spacing:1px}#page-channel-monitor .title{margin:5px 0 0;font-size:28px;letter-spacing:0}#page-channel-monitor .actions{display:flex;gap:10px}#page-channel-monitor .btn{border:1px solid var(--line);background:#fff;border-radius:7px;padding:10px 14px;font-weight:600;cursor:pointer}#page-channel-monitor .btn.primary{background:var(--blue);color:#fff;border-color:var(--blue)}#page-channel-monitor .btn:disabled{opacity:.5;cursor:wait}#page-channel-monitor .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}#page-channel-monitor .hero-controls{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:18px}#page-channel-monitor .seg{display:inline-flex;padding:3px;border:1px solid var(--line);border-radius:9px;background:#eef1f5}#page-channel-monitor .seg button{border:0;background:transparent;border-radius:7px;padding:7px 11px;font-size:12px;cursor:pointer}#page-channel-monitor .seg button.active{background:#fff;box-shadow:0 1px 4px #0001;font-weight:700}#page-channel-monitor .overall{font-size:12px;font-weight:700;padding:7px 11px;border-radius:999px;background:#dcfce7;color:#15803d}#page-channel-monitor .global-switch{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:#5f6b7a}#page-channel-monitor .global-switch input{display:none}#page-channel-monitor .global-switch .slider{position:relative;display:inline-block;width:38px;height:22px;background:#ccd2da;border-radius:20px;cursor:pointer}#page-channel-monitor .global-switch .slider:before{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}#page-channel-monitor .global-switch input:checked+.slider{background:var(--green)}#page-channel-monitor .global-switch input:checked+.slider:before{transform:translateX(16px)}#page-channel-monitor .timeline{display:flex;gap:3px;height:18px;align-items:end;margin-top:12px}#page-channel-monitor .tick{flex:1;min-width:3px;height:10px;border-radius:2px;background:#d7dde5}#page-channel-monitor .tick.ok{height:18px;background:var(--green)}#page-channel-monitor .tick.bad{background:var(--red)}#page-channel-monitor .stat,#page-channel-monitor .panel,#page-channel-monitor .card{background:#fff;border:1px solid var(--line);border-radius:8px}#page-channel-monitor .stat{padding:17px}#page-channel-monitor .stat b{display:block;font-size:25px}#page-channel-monitor .stat span{font-size:12px;color:#7c8798}#page-channel-monitor .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap}#page-channel-monitor .tabs{display:inline-flex;padding:3px;border:1px solid var(--line);border-radius:9px;background:#eef1f5}#page-channel-monitor .tab{border:0;background:transparent;border-radius:7px;padding:8px 12px;font-size:12px;cursor:pointer;white-space:nowrap}#page-channel-monitor .monitor-tab{display:inline-flex;align-items:center;gap:5px;color:#5f6b7a}#page-channel-monitor .monitor-tab input{display:none}#page-channel-monitor .mini-slider{display:inline-block;position:relative;width:30px;height:17px;background:#bfc6d0;border-radius:12px}#page-channel-monitor .mini-slider:before{content:"";position:absolute;width:13px;height:13px;left:2px;top:2px;background:#fff;border-radius:50%;transition:.2s}#page-channel-monitor .monitor-tab input:checked+.mini-slider{background:var(--green)}#page-channel-monitor .monitor-tab input:checked+.mini-slider:before{transform:translateX(13px)}#page-channel-monitor .search{flex:1;border:1px solid var(--line);border-radius:7px;padding:11px 13px;background:#fff}#page-channel-monitor .grid{display:flex;flex-direction:column;gap:20px}#page-channel-monitor .group{background:#fff;border:1px solid var(--line);border-radius:8px;padding:16px}#page-channel-monitor .group-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}#page-channel-monitor .group-title{font-size:16px;font-weight:700}#page-channel-monitor .group-count{font-size:12px;color:#7c8798}#page-channel-monitor .group-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px}#page-channel-monitor .group-off{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}#page-channel-monitor .group-off .compact-off{flex:1 1 320px}#page-channel-monitor .card{background:rgba(255,255,255,.78);backdrop-filter:blur(16px);border:1px solid rgba(220,226,235,.9);border-radius:16px;padding:20px;border-left:0;box-shadow:0 8px 24px rgba(31,48,74,.06);transition:transform .2s,box-shadow .2s}#page-channel-monitor .card:hover{transform:translateY(-2px);box-shadow:0 14px 30px rgba(31,48,74,.11)}#page-channel-monitor .card.ok{border-top:3px solid var(--green)}#page-channel-monitor .card.bad{border-top:3px solid var(--red)}#page-channel-monitor .compact-off{min-height:58px;height:58px;padding:12px 16px;border:1px solid #e3e7ed;border-top:0;background:rgba(248,250,252,.82);opacity:.8;box-shadow:none}#page-channel-monitor .compact-off:hover{transform:none;box-shadow:none}#page-channel-monitor .compact-name,#page-channel-monitor .compact-right{display:flex;align-items:center;gap:10px}#page-channel-monitor .compact-name strong{font-size:14px}#page-channel-monitor .compact-meta,#page-channel-monitor .compact-right>span{font-size:12px;color:#8791a0}#page-channel-monitor .compact-off .dot{width:7px;height:7px;background:#a7b0bc}#page-channel-monitor .card-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}#page-channel-monitor .card-head>div:first-child{min-width:0;padding-right:64px}#page-channel-monitor .name{font-weight:700;font-size:17px;letter-spacing:.1px}#page-channel-monitor .meta{font-size:12px;color:#7c8798;margin-top:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#page-channel-monitor .status-health{font-size:12px;color:#6f7b8c;white-space:nowrap}#page-channel-monitor .body{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0 14px}#page-channel-monitor .metric{padding:12px 13px;border-radius:12px;background:rgba(246,248,251,.9);border:1px solid #edf0f4}#page-channel-monitor .metric label{display:block;color:#8b96a5;font-size:11px;margin-bottom:5px}#page-channel-monitor .metric strong{font-size:17px;color:#182438}#page-channel-monitor .tick.ok{height:20px;background:#2fbf63}#page-channel-monitor .tick.bad{height:10px;background:#e53935}#page-channel-monitor .metric select.model-select{display:block;width:100%;max-width:100%;margin-top:2px;border:0;background:transparent;color:#182438;font:inherit;font-size:15px;font-weight:700;outline:none;appearance:none;padding:0 18px 0 0;background-image:linear-gradient(45deg,transparent 50%,#8791a0 50%),linear-gradient(135deg,#8791a0 50%,transparent 50%);background-position:calc(100% - 9px) 50%,calc(100% - 4px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;cursor:pointer}#page-channel-monitor .metric select.model-select:focus{color:var(--blue)}#page-channel-monitor .group{background:transparent;border:0;padding:0}#page-channel-monitor .group-head{padding:0 2px 8px}#page-channel-monitor .group-title{font-size:15px}#page-channel-monitor .group-count{font-size:12px;color:#8a95a3}#page-channel-monitor .switch{position:relative;width:42px;height:24px}#page-channel-monitor .switch input{opacity:0;width:0;height:0}#page-channel-monitor .slider{position:absolute;inset:0;background:#ccd2da;border-radius:20px;cursor:pointer}#page-channel-monitor .slider:before{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}#page-channel-monitor .switch input:checked+.slider{background:var(--green)}#page-channel-monitor .switch input:checked+.slider:before{transform:translateX(18px)}#page-channel-monitor .panel{padding:18px;margin-top:18px}#page-channel-monitor .panel h2{font-size:16px;margin:0 0 14px}#page-channel-monitor .form{display:grid;grid-template-columns:1fr 1.5fr 1fr 1fr auto;gap:9px}#page-channel-monitor .input{width:100%;border:1px solid var(--line);border-radius:6px;padding:10px 11px}#page-channel-monitor .hint{color:#7c8798;font-size:12px;margin-top:10px}#page-channel-monitor .empty{padding:40px;text-align:center;color:#7c8798}#page-channel-monitor .toast{position:fixed;right:22px;bottom:22px;background:#172033;color:#fff;padding:12px 15px;border-radius:7px;box-shadow:0 8px 24px #0002}#page-channel-monitor .hidden{display:none}@media(max-width:760px){#page-channel-monitor .shell{padding:18px 14px}#page-channel-monitor .top{align-items:start;gap:12px}#page-channel-monitor .actions{flex-direction:column}#page-channel-monitor .summary{grid-template-columns:repeat(2,1fr)}#page-channel-monitor .grid{grid-template-columns:1fr}#page-channel-monitor .form{grid-template-columns:1fr 1fr}#page-channel-monitor .form .wide{grid-column:1/-1}}#page-channel-monitor .url-hidden{display:none!important;color:#9aa3af}#page-channel-monitor .urls-hidden .url-text{display:none!important}#page-channel-monitor .urls-hidden .url-hidden{display:inline!important}#page-channel-monitor .card .api-stamp{position:static!important;display:inline-flex!important;align-items:center!important;width:auto!important;height:26px!important;min-width:0!important;flex:none!important;padding:5px 10px!important;border-radius:6px!important;border:1px solid!important;font-size:12px!important;font-weight:700!important;line-height:1!important;white-space:nowrap!important;transform:none!important}#page-channel-monitor .card .status{display:flex!important;align-items:center!important;gap:7px!important;padding:0!important;min-height:0!important}#page-channel-monitor .card .status-health{display:none!important}#page-channel-monitor .timeline{display:flex!important;flex-flow:row nowrap!important;align-items:flex-end!important;width:100%!important;height:22px!important;gap:2px!important;margin-top:12px!important;overflow:hidden!important}#page-channel-monitor .timeline .tick{display:block!important;flex:1 1 0!important;width:auto!important;min-width:0!important;height:3px!important;margin:0!important;border-radius:3px!important;background:#dfe4eb!important}#page-channel-monitor .timeline .tick.ok{height:20px!important;background:#2fbf63!important}#page-channel-monitor .timeline .tick.degraded{height:13px!important;background:#f59e0b!important}#page-channel-monitor .timeline .tick.bad{height:7px!important;background:#e53935!important}#page-channel-monitor .stat{position:relative;overflow:hidden;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);transition:transform .15s,box-shadow .15s,border-color .15s}#page-channel-monitor .stat::after{content:"";position:absolute;inset:auto -20% -40% auto;width:120px;height:120px;border-radius:50%;background:var(--primary-soft);pointer-events:none}#page-channel-monitor .stat:hover{transform:translateY(-1px);box-shadow:var(--shadow);border-color:color-mix(in srgb,var(--primary) 28%,var(--border))}#page-channel-monitor .stat b,#page-channel-monitor .stat span{position:relative;z-index:1}
+            </style>
+<main class="shell">
+<header class="top"><div><div class="eyebrow">New API / Operations</div><h1 class="title">渠道可用性</h1></div><div class="hero-controls"><div class="seg"><button class="active" data-window="24">24小时</button><button data-window="168">7天</button></div><span class="overall" id="overall">检测中</span><button class="btn" id="refresh">刷新</button><button class="btn" id="testAll">测试全部</button></div></header>
+<section class="summary"><div class="stat"><b id="total">-</b><span>渠道总数</span></div><div class="stat"><b id="enabled">-</b><span>正在检测</span></div><div class="stat"><b id="healthy">-</b><span>当前可用</span></div><div class="stat"><b id="avg">-</b><span>平均响应</span></div></section>
+<div class="toolbar"><div class="tabs" id="tabs"><button class="tab active" data-category="all">全部</button><button class="tab" data-category="gpt">GPT</button><button class="tab" data-category="claude">Claude</button><button class="tab" data-category="grok">Grok</button><button class="tab" data-category="other">国模/其他</button><label class="tab monitor-tab"><span id="categoryToggleLabel">全部监控</span><input id="globalToggle" type="checkbox"><i class="mini-slider"></i></label></div><input class="search" id="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="搜索渠道或分组"><button class="btn" id="showAdd">添加渠道</button></div>
+<section id="grid" class="grid"><div class="empty">正在读取 New API 渠道…</div></section>
+<section class="panel hidden" id="addPanel"><h2>添加 New API 渠道</h2><form class="form" id="channelMonitorAddForm"><input class="input" name="name" placeholder="渠道名称" required><input class="input wide" name="base_url" placeholder="上游 Base URL，例如 https://api.example.com" required><input class="input" name="key" placeholder="渠道 Key" required><input class="input" name="models" placeholder="模型，逗号分隔"><select class="input" name="owner_account_id" id="monitorOwner"><option value="">未归属 / 待设置</option></select><button class="btn primary">保存</button></form><div class="hint">保存会直接写入 New API 生产 SQLite；只添加渠道，不自动启用测试流量。Key 仅写入上游数据库，不会出现在归属数据中。</div></section>
+</main><div id="toast" class="toast hidden"></div>
+
+            <script>(function(){
+const root=document.querySelector('#page-channel-monitor');const $=s=>root.querySelector(s);const api='api/channel-monitor';let rows=[];let owners=[];let activeCategory='all';const token=()=>'';
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.remove('hidden');setTimeout(()=>e.classList.add('hidden'),2600)}
+async function get(path,opt={}){opt.headers={...(opt.headers||{}),"X-Channel-Monitor-Token":token()};const r=await fetch(api+path,opt);const d=await r.json();if(!r.ok)throw Error(d.error||r.status);return d}
+function esc(s){return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+const HISTORY_WINDOW=60;
+const MASK_CHANNEL_URLS_KEY='mask_channel_urls';
+function maskMonitorUrl(url){const value=String(url||'');const hidden=localStorage.getItem(MASK_CHANNEL_URLS_KEY)==='1'||localStorage.getItem('mask_dashboard_urls')==='1';if(!hidden)return esc(value);try{const parsed=new URL(value);return esc(`${parsed.protocol}//${'*'.repeat(Math.max(8,parsed.host.length))}${parsed.pathname==='/'?'':'/*'}`)}catch(_){return esc('********')}}
+function timeline(c, windowSize=HISTORY_WINDOW){const h=c.history||[];const expand=windowSize===120&&h.length<120;const recent=expand?h.slice(-60).flatMap(x=>[x,x]):h.slice(-windowSize);const padding=Math.max(0,windowSize-recent.length);return `<div class="timeline" data-history-window="${windowSize}">${Array.from({length:windowSize},(_,i)=>{const x=i<padding?null:recent[i-padding];const state=x?(x.ok?(Number(x.latency_ms||0)>=6000?'degraded':'ok'):'bad'):'';return `<i class="tick ${state}" title="${x?esc(x.at)+(state==='degraded'?' · 响应较慢':''):'暂无样本'}"></i>`}).join('')}</div>`}
+const isMonitorOff=c=>!c.monitor_enabled||!c.category_enabled||c.monitor_global_enabled===false;
+function ownerOpts(selected){return `<option value="">未归属 / 待设置</option>`+owners.map(o=>`<option value="${esc(o.id)}" ${String(o.id)===String(selected||'')?'selected':''}>${esc(o.name)} · ${esc(o.id)}</option>`).join('')}
+function card(c, historyWindow=HISTORY_WINDOW){const off=isMonitorOff(c);if(off)return `<article class="card compact-off" data-url="${esc(c.base_url)}"><div class="compact-name"><span class="dot"></span><strong>${esc(c.name)}</strong><span class="compact-meta">#${c.id} · 优先级 ${c.priority} · ${esc(c.monitor_model)}</span></div><div class="compact-right"><span>监控关闭</span><label class="switch"><input class="monitor-toggle" data-id="${c.id}" type="checkbox"><span class="slider"></span></label></div></article>`;const rate=c.availability_24h==null?'-':c.availability_24h+'%';const chosen=c.monitor_model||((c.models||[]).includes('gpt-5.6-terra')?'gpt-5.6-terra':((c.models||[])[0]||''));const opts=(c.models||[]).map(m=>`<option value="${esc(m)}" ${m===chosen?'selected':''}>${esc(m)}</option>`).join('');return `<article class="card ${c.last_ok===false?'bad':'ok'}" data-url="${esc(c.base_url)}"><div class="card-head"><div><div class="name">${esc(c.name)}</div><div class="meta">#${c.id} · 优先级 ${c.priority} · <span class="url-text url-link">${maskMonitorUrl(c.base_url)}</span><span class="url-hidden"> · 网址已隐藏</span></div></div><div class="status"><span class="api-stamp ${c.channel_enabled?'on':'off'}">New API ${c.channel_enabled?'启用':'停用'}</span><label class="switch"><input class="monitor-toggle" data-id="${c.id}" type="checkbox" ${c.monitor_enabled?'checked':''}><span class="slider"></span></label></div></div><div class="body"><div class="metric"><label>监控模型</label><select class="model-select" data-id="${c.id}">${opts}<option value="__custom__">手动填写…</option></select></div><div class="metric"><label>归属账号</label><select class="owner-select" data-id="${c.id}">${ownerOpts(c.owner_account_id)}</select></div><div class="metric"><label>24小时可用性</label><strong>${rate}</strong></div><div class="metric"><label>最近延迟</label><strong>${c.last_latency_ms?c.last_latency_ms+' ms':'-'}</strong></div><div class="metric"><label>连续失败</label><strong>${c.consecutive_failures||0} 次</strong></div></div>${timeline(c, historyWindow)}</article>`}
+function render(){const q=$('#search').value.toLowerCase();const list=rows.filter(c=>(activeCategory==='all'||c.category===activeCategory)&&(c.name+' '+c.base_url+' '+c.group+' '+c.monitor_model+' '+c.models.join(' ')).toLowerCase().includes(q));const groups={};list.forEach(c=>{const g=c.group||'未分组';(groups[g]??=[]).push(c)});Object.values(groups).forEach(items=>items.sort((a,b)=>(Number(a.combination_rank||7)-Number(b.combination_rank||7))||(Number(b.priority||0)-Number(a.priority||0))||a.name.localeCompare(b.name,'zh')||Number(a.id)-Number(b.id)));const groupHtml=Object.entries(groups).map(([g,items])=>{const activeItems=items.filter(x=>!isMonitorOff(x));const offItems=items.filter(isMonitorOff);const historyWindow=activeItems.length===1?120:60;return `<section class="group"><div class="group-head"><div class="group-title">${esc(g)}</div><div class="group-count">${items.length} 个渠道 · ${items.filter(x=>x.last_ok===true).length} 个当前可用</div></div><div class="group-grid">${activeItems.map(c=>card(c,historyWindow)).join('')}</div>${offItems.length?`<div class="group-off">${offItems.map(card).join('')}</div>`:''}</section>`}).join('');$('#grid').innerHTML=groupHtml||'<div class="empty">没有匹配的渠道</div>';const effectiveRows=rows.filter(x=>x.monitor_enabled&&x.category_enabled&&x.monitor_global_enabled!==false);$('#total').textContent=rows.length;$('#enabled').textContent=effectiveRows.length;$('#healthy').textContent=effectiveRows.filter(x=>x.last_ok===true).length;const lat=effectiveRows.filter(x=>x.last_latency_ms>0).map(x=>x.last_latency_ms);$('#avg').textContent=lat.length?Math.round(lat.reduce((a,b)=>a+b,0)/lat.length)+' ms':'-';const bad=rows.filter(x=>x.enabled&&x.last_ok===false).length;$('#overall').textContent=bad?'部分异常':'运行正常';$('#overall').classList.toggle('warn',!!bad);root.querySelectorAll('.monitor-toggle').forEach(e=>e.onchange=async()=>{try{await get('/channels/'+e.dataset.id+'/monitor-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:e.checked})});toast(e.checked?'监控已开启':'监控已关闭');load()}catch(x){e.checked=!e.checked;toast('监控切换失败：'+x.message)}});root.querySelectorAll('.model-select').forEach(e=>e.onchange=async()=>{let model=e.value;if(model==='__custom__'){model=prompt('输入要检测的模型名');if(!model){load();return}}try{await get('/channels/'+e.dataset.id+'/monitor-model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model})});toast('测试模型已保存');load()}catch(x){toast('模型保存失败：'+x.message)}});root.querySelectorAll('.owner-select').forEach(e=>e.onchange=async()=>{try{await get('/channels/'+e.dataset.id+'/owner',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({owner_account_id:e.value})});toast(e.value?'归属已更新':'已清除手动归属');load()}catch(x){toast('归属更新失败：'+x.message);load()}});$('#globalToggle').checked=rows.length?(activeCategory==='all'?rows[0].monitor_global_enabled!==false:rows.filter(x=>x.category===activeCategory).every(x=>x.category_enabled!==false)):true;}
+async function load(){try{const o=await get('/owners');owners=o.owners||[];const sel=$('#monitorOwner');if(sel)sel.innerHTML=ownerOpts('');rows=(await get('/channels')).channels;render()}catch(e){toast('读取渠道失败：'+e.message)}}
+async function toggle(e){try{await get('/channels/'+e.target.dataset.id+'/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:e.target.checked})});toast(e.target.checked?'渠道已启用':'渠道已停用');load()}catch(x){e.target.checked=!e.target.checked;toast('切换失败：'+x.message)}}
+async function testOne(id){try{toast('正在测试…');const d=await get('/test/'+id);toast(d.ok?`正常 · ${d.last_latency_ms} ms`:`失败 · ${d.last_message}`);load()}catch(e){toast('测试失败：'+e.message)}}
+root.addEventListener('mask-channel-urls-change',()=>render());root.addEventListener('combination-order-change',()=>load());root.addEventListener('click',e=>{const card=e.target.closest('.card[data-url]');if(!card||e.target.closest('input,select,button,label'))return;window.open(card.dataset.url,'_blank','noopener,noreferrer')});$('#search').oninput=render;root.querySelectorAll('[data-category]').forEach(b=>b.onclick=()=>{activeCategory=b.dataset.category;root.querySelectorAll('[data-category]').forEach(x=>x.classList.toggle('active',x===b));$('#categoryToggleLabel').textContent=(activeCategory==='all'?'全部':root.querySelector(`[data-category="${activeCategory}"]`)?.textContent||activeCategory)+'监控';render()});$('#globalToggle').onchange=async()=>{const enabled=$('#globalToggle').checked;try{if(activeCategory==='all'){await get('/global-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})})}else{await get('/category-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category:activeCategory,enabled})})}toast(enabled?'当前分类监控已开启':'当前分类监控已关闭');load()}catch(x){$('#globalToggle').checked=!enabled;toast('分类监控切换失败：'+x.message)}};$('#testAll').onclick=async()=>{for(const c of rows.filter(x=>x.monitor_enabled&&(activeCategory==='all'||x.category===activeCategory)))await testOne(c.id);load()};$('#showAdd').onclick=()=>$('#addPanel').classList.toggle('hidden');root.querySelectorAll('[data-window]').forEach(b=>b.onclick=()=>{root.querySelectorAll('[data-window]').forEach(x=>x.classList.remove('active'));b.classList.add('active');windowSize=Number(b.dataset.window);render()});let windowSize=24;$('#channelMonitorAddForm').onsubmit=async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));try{await get('/channels',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});toast('渠道已添加');e.target.reset();load()}catch(x){toast('添加失败：'+x.message)}};load();setInterval(load,30000);
+})();</script>
+        </section>
+        {% endraw %}
 
         <!-- Add channel -->
         <section id="page-add" class="page" role="tabpanel">
@@ -211,6 +248,20 @@
                     <div id="settingsStatus" class="form-full" style="font-size:13px"></div>
                 </div>
 
+                <div class="settings-section combination-order-settings" id="channelCombinationOrderSettings">
+                    <div class="settings-section-head">
+                        <h2>渠道组合排序</h2>
+                    </div>
+                    <p class="lead">调整渠道可用性页中的组合类别顺序。</p>
+                    <div id="combinationOrderList" class="combination-order-list" aria-live="polite">
+                        <div class="loading-block"><span class="spin"></span> 加载中…</div>
+                    </div>
+                    <div class="combination-order-actions">
+                        <button class="btn btn-primary" type="button" id="btnSaveCombinationOrder">保存排序</button>
+                        <span id="combinationOrderStatus" role="status" aria-live="polite"></span>
+                    </div>
+                </div>
+
                 <h2 style="margin-top:28px">Sub2API Hub 配置</h2>
                 <p class="lead" style="margin-bottom:14px">
                     将别人的低价中转站自动配置为本机 Sub2API 的上游账号和分组。
@@ -295,6 +346,11 @@
                             </span>
                         </label>
                     </div>
+                </div>
+                <div class="field form-full" style="margin-top:14px">
+                    <label for="groupFilterKeyword">分组详情筛选关键词</label>
+                    <input type="search" id="groupFilterKeyword" placeholder="例如 GPT、Plus、Pro；留空显示全部分组" maxlength="64" autocomplete="off">
+                    <span class="hint">只按分组名称匹配：输入 GPT 只显示名称中包含 GPT 的分组，输入 Plus 或 Pro 同理。</span>
                 </div>
                 <p class="lead" style="margin-bottom:14px">分组名称包含以下关键词时自动归类。支持自定义增删，修改后实时用于仪表盘统计。</p>
                 <div id="rulesEditor"></div>
@@ -595,8 +651,13 @@
     let showRatioTable = localStorage.getItem('show_ratio_table') !== '0';
     let showTodayDataset = localStorage.getItem('show_today_dataset') !== '0';
     let showTotalDataset = localStorage.getItem('show_total_dataset') !== '0';
-    let maskDashboardUrls = localStorage.getItem('mask_dashboard_urls') === '1';
-    const CHANNEL_SORT_VERSION = 'usage-v2';
+    let maskDashboardUrls = localStorage.getItem('mask_channel_urls') === '1' || localStorage.getItem('mask_dashboard_urls') === '1';
+    const normalizeGroupFilterKeyword = value => typeof value === 'string' ? value.trim() : '';
+    const parseGroupFilterKeywords = value => normalizeGroupFilterKeyword(value)
+        .split(/[,，;；\n]+/)
+        .map(x => x.trim().toLowerCase())
+        .filter(Boolean);
+    let groupFilterKeyword = normalizeGroupFilterKeyword(localStorage.getItem('group_filter_keyword'));
     let channelSortKey = 'today_cost';
     let channelSortDirection = 'desc';
     try {
@@ -762,7 +823,7 @@
             const aggregate = bySite.get(key);
             aggregate._members.push(account);
             aggregate.groups.push(...(account.groups || []).map(g => ({ ...g, _account_name: name })));
-            for (const field of ['balance', 'today_cost', 'yesterday_cost', 'recent_cost', 'total_cost']) {
+            for (const field of ['balance', 'today_cost', 'site_revenue', 'site_revenue_total', 'site_profit', 'site_profit_total', 'yesterday_cost', 'recent_cost', 'total_cost']) {
                 const value = Number(account[field]);
                 if (Number.isFinite(value)) aggregate[field] = (Number(aggregate[field]) || 0) + value;
             }
@@ -780,7 +841,19 @@
         const rawAccounts = data.accounts || [];
         const accounts = aggregateSameSiteAccounts(rawAccounts);
         data = { ...data, accounts };
-        const accountLookup = Object.fromEntries(rawAccounts.map(a => [a.id, a]));
+        const todayRevenueValue = data.attributed_today_revenue == null ? data.today_revenue : data.attributed_today_revenue;
+        const totalRevenueValue = data.attributed_total_revenue == null ? data.total_revenue : data.attributed_total_revenue;
+        const todayRevenue = todayRevenueValue == null ? '—' : money(todayRevenueValue);
+        const totalRevenue = totalRevenueValue == null ? '—' : money(totalRevenueValue);
+        const attributedTodayRevenue = data.attributed_today_revenue == null ? null : Number(data.attributed_today_revenue);
+        const attributedTotalRevenue = data.attributed_total_revenue == null ? null : Number(data.attributed_total_revenue);
+        const attributedTodayCost = data.attributed_today_cost == null ? null : Number(data.attributed_today_cost);
+        const attributedTotalCost = data.attributed_total_cost == null ? null : Number(data.attributed_total_cost);
+        const todayProfit = attributedTodayRevenue == null || attributedTodayCost == null ? '—' : money(attributedTodayRevenue - attributedTodayCost);
+        const totalProfit = attributedTotalRevenue == null || attributedTotalCost == null ? '—' : money(attributedTotalRevenue - attributedTotalCost);
+        const todayProfitClass = todayProfit === '—' ? '' : (attributedTodayRevenue - attributedTodayCost >= 0 ? 'c-green' : 'c-red');
+        const totalProfitClass = totalProfit === '—' ? '' : (attributedTotalRevenue - attributedTotalCost >= 0 ? 'c-green' : 'c-red');
+        const unmatchedToday = Number(data.unmatched_today_revenue || 0);
         let h = '';
 
         if (data.empty && !(data.accounts && data.accounts.length)) {
@@ -809,9 +882,29 @@
                 <div class="hint">按上游统计口径</div>
             </div>
             <div class="stat-box">
+                <div class="label">今日收入</div>
+                <div class="num c-green">${esc(todayRevenue)}</div>
+                <div class="hint">New API 整站消费${unmatchedToday > 0.00005 ? ` · 待归属 ${esc(money(unmatchedToday))}` : ''}</div>
+            </div>
+            <div class="stat-box">
+                <div class="label">今日盈亏</div>
+                <div class="num ${todayProfitClass}">${esc(todayProfit)}</div>
+                <div class="hint">已归属收入 - 今日消耗</div>
+            </div>
+            <div class="stat-box">
                 <div class="label">累计消耗</div>
                 <div class="num">${esc(money(data.total_cost))}</div>
                 <div class="hint">历史总消耗</div>
+            </div>
+            <div class="stat-box">
+                <div class="label">累计收入</div>
+                <div class="num c-green">${esc(totalRevenue)}</div>
+                <div class="hint">New API 整站历史消费</div>
+            </div>
+            <div class="stat-box">
+                <div class="label">累计盈亏</div>
+                <div class="num ${totalProfitClass}">${esc(totalProfit)}</div>
+                <div class="hint">已归属收入 - 累计消耗</div>
             </div>
             <div class="stat-box">
                 <div class="label">渠道 / 异常</div>
@@ -1106,13 +1199,22 @@ function getCategoryTag(cat) {
     function renderSingleChannelCard(acc) {
         const bal = money(acc.balance);
         const today = money(acc.today_cost);
+        const revenue = acc.site_revenue == null ? '—' : money(acc.site_revenue);
+        const profit = acc.site_profit == null ? '—' : money(acc.site_profit);
+        const profitClass = acc.site_profit == null ? '' : (Number(acc.site_profit) >= 0 ? 'green' : 'red');
+        const revenueTitle = acc.site_revenue_status || '本站消费日志按上游Key归属';
         const yesterday = money(acc.yesterday_cost);
         const recent = money(acc.recent_cost);
         const total = money(acc.total_cost);
+        const revenueTotal = acc.site_revenue_total == null ? '—' : money(acc.site_revenue_total);
+        const profitTotal = acc.site_profit_total == null ? '—' : money(acc.site_profit_total);
+        const profitTotalClass = acc.site_profit_total == null ? '' : (Number(acc.site_profit_total) >= 0 ? 'green' : 'red');
         const groups = acc.groups || [];
         const id = esc(acc.id);
         const rr = acc.recharge_ratio || 1;
         const isApiKey = acc.credential_type === 'user_api_key';
+        const accountTypeLabels = { cookie: 'Cookie', user_api_key: 'User API Key', bearer: 'Bearer', token: 'Token', login: '账号密码' };
+        const accountType = accountTypeLabels[acc.credential_type] || (acc.auth_type === 'login' ? '账号密码' : 'Token');
         const hasUpstream = !!acc.has_upstream_key;
         const hasError = acc.error && !acc.balance_note;
         const hasNote = acc.balance_note;
@@ -1120,9 +1222,16 @@ function getCategoryTag(cat) {
             ? `<div class="ch-members">账号：${esc(acc._member_names || '')}</div>` : '';
 
         let groupsHtml = '';
-        if (showChannelGroups && groups.length) {
+        const groupKeywords = parseGroupFilterKeywords(groupFilterKeyword);
+        const visibleGroups = groupKeywords.length
+            ? groups.filter(g => {
+                const name = String(g.name || '').toLowerCase();
+                return groupKeywords.some(keyword => name.includes(keyword));
+            })
+            : groups;
+        if (showChannelGroups && visibleGroups.length) {
             const byCategory = {};
-            groups.forEach(g => {
+            visibleGroups.forEach(g => {
                 const cat = classifyGroup(g.name);
                 if (!byCategory[cat]) byCategory[cat] = [];
                 byCategory[cat].push(g);
@@ -1143,18 +1252,21 @@ function getCategoryTag(cat) {
                 });
             });
             groupsHtml += '</div>';
+        } else if (showChannelGroups && groupKeywords.length) {
+            groupsHtml = `<div class="ch-groups-empty">没有匹配“${esc(groupFilterKeyword)}”的分组</div>`;
         }
 
         return `<article class="ch-card${hasError ? ' has-error' : ''}" data-id="${id}">
             <div class="ch-top">
-                <div class="ch-info">
+                <div class="ch-info-main">
                     <span class="ch-name">${esc(acc.name)}</span>
-                    ${memberLine}
                     <span class="ch-tag tag-${esc(acc.platform)}">${esc(acc.platform)}</span>
+                    <span class="ch-tag tag-other" title="账号认证类型">${esc(accountType)}</span>
                     ${isApiKey ? `<span class="ch-tag tag-other" title="User API Key：可查模型，余额/分组需 Cookie 登录">API Key</span>` : ''}
                     ${acc.credential_type === 'cookie' ? `<span class="ch-tag tag-other" title="Cookie 会话">Cookie</span>` : ''}
-                    ${hasUpstream ? `<span class="ch-tag tag-other" title="已配置上游 sk- Key，可用于 Sub2API 联动" style="color:var(--success)">上游Key</span>` : `<span class="ch-tag tag-other" title="未配置上游 API Key，无法推送到 Sub2API" style="opacity:.7">无上游Key</span>`}
+                    ${hasUpstream ? `<span class="ch-tag tag-other" title="已配置上游 sk- Key，可用于 Sub2API 联动" style="color:var(--success)">上游 Key：已配置</span>` : `<span class="ch-tag tag-other" title="未配置上游 API Key，无法推送到 Sub2API" style="opacity:.7">上游 Key：未配置</span>`}
                     ${rr !== 1 ? `<span class="ch-tag tag-other" title="充值比例 1:${esc(rr)}，倍率已归一化">1:${esc(rr)}</span>` : ''}
+                    ${memberLine}
                     <span class="ch-url" title="${maskUrl(acc.base_url)}"><a href="${esc(acc.base_url)}" target="_blank" rel="noopener noreferrer">${maskUrl(acc.base_url)}</a></span>
                 </div>
                 <div class="ch-actions">
@@ -1169,8 +1281,12 @@ function getCategoryTag(cat) {
             <div class="ch-metrics">
                 <div class="ch-metric"><div class="label">余额</div><div class="val green">${esc(bal)}</div></div>
                 <div class="ch-metric"><div class="label">今日消耗</div><div class="val orange">${esc(today)}</div></div>
-                <div class="ch-metric"><div class="label">昨日 / 近7日</div><div class="val">${esc(yesterday)} / ${esc(recent)}</div></div>
+                <div class="ch-metric" title="${esc(revenueTitle)}"><div class="label">今日收入</div><div class="val green">${esc(revenue)}</div></div>
+                <div class="ch-metric" title="今日收入 - 今日上游消耗"><div class="label">今日盈亏</div><div class="val ${profitClass}">${esc(profit)}</div></div>
+                <div class="ch-metric"><div class="label">昨日消耗</div><div class="val">${esc(yesterday)}</div></div>
                 <div class="ch-metric"><div class="label">累计消耗</div><div class="val">${esc(total)}</div></div>
+                <div class="ch-metric" title="累计本站消费收入"><div class="label">累计收入</div><div class="val green">${esc(revenueTotal)}</div></div>
+                <div class="ch-metric" title="累计收入 - 累计上游消耗"><div class="label">累计盈亏</div><div class="val ${profitTotalClass}">${esc(profitTotal)}</div></div>
             </div>
             ${groupsHtml}
             ${hasNote ? `<div style="padding:10px 22px;font-size:12px;color:var(--text-muted);background:var(--primary-soft)">ℹ ${esc(hasNote)}</div>` : ''}
@@ -1333,7 +1449,105 @@ function getCategoryTag(cat) {
         }
     }
 
-    // ---------- settings ----------
+    async function saveDisplaySettings(patch) {
+        const payload = { ...patch };
+        try {
+            await api('POST', '/settings', payload);
+            Object.entries(payload).forEach(([key, value]) => {
+                if (key === 'group_filter_keyword') {
+                    groupFilterKeyword = normalizeGroupFilterKeyword(value);
+                    localStorage.setItem(key, groupFilterKeyword);
+                } else {
+                    localStorage.setItem(key, value ? '1' : '0');
+                }
+            });
+            if (Object.prototype.hasOwnProperty.call(payload, 'mask_channel_urls')) {
+                setMaskChannelUrls(payload.mask_channel_urls, false);
+            }
+            if (lastDashboard) renderDashboard(lastDashboard);
+            document.querySelector('#page-channel-monitor')?.dispatchEvent(new Event('mask-channel-urls-change'));
+        } catch (e) {
+            toast('显示设置同步失败：' + e.message, false);
+        }
+    }
+
+    let combinationOrder = [];
+    let combinationOptions = [];
+
+    function renderCombinationOrder() {
+        const list = $('#combinationOrderList');
+        if (!list) return;
+        const labels = Object.fromEntries(combinationOptions.map(item => [item.key, item.label]));
+        list.innerHTML = combinationOrder.map((key, index) => `
+            <div class="combination-order-item" draggable="true" data-combination-key="${esc(key)}">
+                <span class="combination-drag" aria-hidden="true">☷</span>
+                <span class="combination-position">${index + 1}</span>
+                <span class="combination-label">${esc(labels[key] || key)}</span>
+                <span class="combination-move">
+                    <button type="button" class="btn btn-ghost btn-icon" data-combination-move="up" data-combination-key="${esc(key)}" aria-label="上移 ${esc(labels[key] || key)}" title="上移">↑</button>
+                    <button type="button" class="btn btn-ghost btn-icon" data-combination-move="down" data-combination-key="${esc(key)}" aria-label="下移 ${esc(labels[key] || key)}" title="下移">↓</button>
+                </span>
+            </div>`).join('');
+
+        list.querySelectorAll('[data-combination-move]').forEach(button => {
+            button.disabled = (button.dataset.combinationMove === 'up' && combinationOrder.indexOf(button.dataset.combinationKey) === 0)
+                || (button.dataset.combinationMove === 'down' && combinationOrder.indexOf(button.dataset.combinationKey) === combinationOrder.length - 1);
+            button.addEventListener('click', () => moveCombination(button.dataset.combinationKey, button.dataset.combinationMove === 'up' ? -1 : 1));
+        });
+        list.querySelectorAll('.combination-order-item').forEach(item => {
+            item.addEventListener('dragstart', event => {
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', item.dataset.combinationKey);
+                item.classList.add('dragging');
+            });
+            item.addEventListener('dragend', () => item.classList.remove('dragging'));
+            item.addEventListener('dragover', event => {
+                event.preventDefault();
+                item.classList.add('drag-over');
+            });
+            item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
+            item.addEventListener('drop', event => {
+                event.preventDefault();
+                item.classList.remove('drag-over');
+                const source = event.dataTransfer.getData('text/plain');
+                const target = item.dataset.combinationKey;
+                if (source && source !== target) {
+                    const from = combinationOrder.indexOf(source);
+                    const to = combinationOrder.indexOf(target);
+                    combinationOrder.splice(from, 1);
+                    combinationOrder.splice(to, 0, source);
+                    renderCombinationOrder();
+                }
+            });
+        });
+    }
+
+    function moveCombination(key, delta) {
+        const from = combinationOrder.indexOf(key);
+        const to = from + delta;
+        if (from < 0 || to < 0 || to >= combinationOrder.length) return;
+        [combinationOrder[from], combinationOrder[to]] = [combinationOrder[to], combinationOrder[from]];
+        renderCombinationOrder();
+    }
+
+    async function saveCombinationOrder() {
+        const btn = $('#btnSaveCombinationOrder');
+        const status = $('#combinationOrderStatus');
+        setBusy(btn, true, '保存中…', '保存排序');
+        if (status) status.textContent = '';
+        try {
+            await api('POST', '/settings', { channel_combination_order: combinationOrder });
+            await loadSettings();
+            document.querySelector('#page-channel-monitor')?.dispatchEvent(new Event('combination-order-change'));
+            if (status) status.innerHTML = '<span style="color:var(--success)">已保存</span>';
+        } catch (e) {
+            if (status) status.innerHTML = `<span style="color:var(--danger)">${esc(e.message)}</span>`;
+            toast('排序保存失败：' + e.message, false);
+        } finally {
+            setBusy(btn, false, null, '保存排序');
+        }
+    }
+
     async function saveSettings() {
         const key = $('#s_capsolver_key').value.trim();
         try {
@@ -1367,7 +1581,38 @@ function getCategoryTag(cat) {
             if (data.hub_password_set) $('#s_hub_password').placeholder = '已配置（留空则沿用）';
             if (data.hub_api_key_set) $('#s_hub_api_key').placeholder = '已配置 (' + (data.hub_api_key_masked || '****') + ')';
             if (data.ultra_low_rate != null) $('#s_ultra_low_rate').value = data.ultra_low_rate;
-        } catch (e) {}
+            const displaySettings = {
+                show_channel_groups: 'showChannelGroups',
+                show_consumption_chart: 'showConsumptionChart',
+                show_ratio_table: 'showRatioTable',
+                show_today_dataset: 'showTodayDataset',
+                show_total_dataset: 'showTotalDataset',
+                mask_channel_urls: 'maskDashboardUrls',
+            };
+            combinationOptions = Array.isArray(data.channel_combination_options) ? data.channel_combination_options : [];
+            combinationOrder = Array.isArray(data.channel_combination_order) ? data.channel_combination_order.slice() : [];
+            renderCombinationOrder();
+            Object.entries(displaySettings).forEach(([key, id]) => {
+                if (typeof data[key] !== 'boolean') return;
+                localStorage.setItem(key, data[key] ? '1' : '0');
+                const el = document.getElementById(id);
+                if (el) el.checked = data[key];
+            });
+            showChannelGroups = data.show_channel_groups !== false;
+            showConsumptionChart = data.show_consumption_chart !== false;
+            showRatioTable = data.show_ratio_table !== false;
+            showTodayDataset = data.show_today_dataset !== false;
+            showTotalDataset = data.show_total_dataset !== false;
+            maskDashboardUrls = data.mask_channel_urls === true;
+            groupFilterKeyword = normalizeGroupFilterKeyword(data.group_filter_keyword);
+            localStorage.setItem('group_filter_keyword', groupFilterKeyword);
+            const keywordEl = document.getElementById('groupFilterKeyword');
+            if (keywordEl) keywordEl.value = groupFilterKeyword;
+            document.querySelector('#page-channel-monitor')?.dispatchEvent(new Event('mask-channel-urls-change'));
+            if (lastDashboard) renderDashboard(lastDashboard);
+        } catch (e) {
+            // 保留本地回退值，服务端暂时不可用时页面仍可操作
+        }
         renderRulesEditor();
     }
 
@@ -1394,7 +1639,10 @@ function getCategoryTag(cat) {
             keywords.forEach((kw, idx) => {
                 html += `<span class="rule-tag">${esc(kw)}<button type="button" class="x" data-rm-cat="${esc(cat)}" data-rm-idx="${idx}" aria-label="删除">×</button></span>`;
             });
-            html += `<button type="button" class="rule-add" data-add-btn="${esc(cat)}" aria-label="为 ${esc(cat)} 添加关键词" title="添加关键词">+</button>`;
+            html += `<span class="rule-add">
+                <input type="text" id="addkw_${esc(cat)}" placeholder="新关键词" data-add-cat="${esc(cat)}" maxlength="32">
+                <button type="button" data-add-btn="${esc(cat)}">+</button>
+            </span>`;
             html += `</div></div>`;
         });
         el.innerHTML = html;
@@ -1410,16 +1658,24 @@ function getCategoryTag(cat) {
         el.querySelectorAll('[data-add-btn]').forEach(btn => {
             btn.addEventListener('click', () => addKeyword(btn.dataset.addBtn));
         });
+        el.querySelectorAll('[data-add-cat]').forEach(input => {
+            input.addEventListener('keydown', e => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addKeyword(input.dataset.addCat);
+                }
+            });
+        });
     }
 
     function addKeyword(cat) {
-        const entered = prompt(`为 ${cat} 添加关键词`);
-        if (entered === null) return;
-        const val = entered.trim().toLowerCase();
+        const input = document.getElementById(`addkw_${cat}`);
+        const val = (input?.value || '').trim().toLowerCase();
         if (!val) return;
         if (!classifyRules[cat]) classifyRules[cat] = [];
         if (classifyRules[cat].includes(val)) { toast('关键词已存在', false); return; }
         classifyRules[cat].push(val);
+        if (input) input.value = '';
         renderRulesEditor();
     }
 
@@ -2913,6 +3169,7 @@ function getCategoryTag(cat) {
         $('#addForm')?.addEventListener('submit', onAddSubmit);
         $('#addForm')?.addEventListener('reset', () => setTimeout(toggleAuth, 0));
         $('#btnSaveSettings')?.addEventListener('click', saveSettings);
+        $('#btnSaveCombinationOrder')?.addEventListener('click', saveCombinationOrder);
         $('#btnCapBalance')?.addEventListener('click', checkCapsolverBalance);
         $('#btnSaveRules')?.addEventListener('click', saveRules);
         $('#btnResetRules')?.addEventListener('click', resetRules);
@@ -2964,7 +3221,7 @@ function getCategoryTag(cat) {
             showChannelGroupsSwitch.checked = showChannelGroups;
             showChannelGroupsSwitch.addEventListener('change', () => {
                 showChannelGroups = showChannelGroupsSwitch.checked;
-                localStorage.setItem('show_channel_groups', showChannelGroups ? '1' : '0');
+                saveDisplaySettings({ show_channel_groups: showChannelGroups });
                 if (lastDashboard) renderDashboard(lastDashboard);
             });
         }
@@ -2972,7 +3229,7 @@ function getCategoryTag(cat) {
             showConsumptionChartSwitch.checked = showConsumptionChart;
             showConsumptionChartSwitch.addEventListener('change', () => {
                 showConsumptionChart = showConsumptionChartSwitch.checked;
-                localStorage.setItem('show_consumption_chart', showConsumptionChart ? '1' : '0');
+                saveDisplaySettings({ show_consumption_chart: showConsumptionChart });
                 if (lastDashboard) renderDashboard(lastDashboard);
             });
         }
@@ -2980,7 +3237,7 @@ function getCategoryTag(cat) {
             showRatioTableSwitch.checked = showRatioTable;
             showRatioTableSwitch.addEventListener('change', () => {
                 showRatioTable = showRatioTableSwitch.checked;
-                localStorage.setItem('show_ratio_table', showRatioTable ? '1' : '0');
+                saveDisplaySettings({ show_ratio_table: showRatioTable });
                 if (lastDashboard) renderDashboard(lastDashboard);
             });
         }
@@ -2991,9 +3248,13 @@ function getCategoryTag(cat) {
                     toast(`${label}和另一个图表数据至少保留一个`, false);
                     return;
                 }
-                if (key === 'today') showTodayDataset = changed.checked;
-                else showTotalDataset = changed.checked;
-                localStorage.setItem(key === 'today' ? 'show_today_dataset' : 'show_total_dataset', changed.checked ? '1' : '0');
+                if (key === 'today') {
+                    showTodayDataset = changed.checked;
+                    saveDisplaySettings({ show_today_dataset: showTodayDataset });
+                } else {
+                    showTotalDataset = changed.checked;
+                    saveDisplaySettings({ show_total_dataset: showTotalDataset });
+                }
                 if (lastDashboard && showConsumptionChart) renderDashboard(lastDashboard);
             });
         };
@@ -3003,15 +3264,38 @@ function getCategoryTag(cat) {
             enforceDatasetOneOn(showTodayDatasetSwitch, showTotalDatasetSwitch, 'today', '今日消费');
             enforceDatasetOneOn(showTotalDatasetSwitch, showTodayDatasetSwitch, 'total', '累计消费');
         }
-        if (maskDashboardUrlsSwitch) {
-            maskDashboardUrlsSwitch.checked = maskDashboardUrls;
-            maskDashboardUrlsSwitch.addEventListener('change', () => {
-                maskDashboardUrls = maskDashboardUrlsSwitch.checked;
-                localStorage.setItem('mask_dashboard_urls', maskDashboardUrls ? '1' : '0');
-                if (lastDashboard) renderDashboard(lastDashboard);
-            });
-        }
-        if (channelSort) {
+    function getMaskChannelUrls() {
+        return localStorage.getItem('mask_channel_urls') === '1' || localStorage.getItem('mask_dashboard_urls') === '1';
+    }
+
+    function setMaskChannelUrls(enabled, persist = true) {
+        maskDashboardUrls = !!enabled;
+        localStorage.setItem('mask_channel_urls', maskDashboardUrls ? '1' : '0');
+        localStorage.setItem('mask_dashboard_urls', maskDashboardUrls ? '1' : '0');
+        const switchEl = $('#maskDashboardUrls');
+        if (switchEl) switchEl.checked = maskDashboardUrls;
+        if (lastDashboard) renderDashboard(lastDashboard);
+        document.querySelector('#page-channel-monitor')?.dispatchEvent(new Event('mask-channel-urls-change'));
+        if (persist) saveDisplaySettings({ mask_channel_urls: maskDashboardUrls });
+    }
+
+    document.addEventListener('change', e => {
+        if (e.target?.id === 'maskDashboardUrls') setMaskChannelUrls(e.target.checked);
+    });
+
+    if (maskDashboardUrlsSwitch) {
+        maskDashboardUrlsSwitch.checked = getMaskChannelUrls();
+    }
+    const groupFilterInput = $('#groupFilterKeyword');
+    let groupFilterTimer = null;
+    groupFilterInput?.addEventListener('input', e => {
+        groupFilterKeyword = normalizeGroupFilterKeyword(e.target.value);
+        localStorage.setItem('group_filter_keyword', groupFilterKeyword);
+        if (lastDashboard) renderDashboard(lastDashboard);
+        clearTimeout(groupFilterTimer);
+        groupFilterTimer = setTimeout(() => saveDisplaySettings({ group_filter_keyword: groupFilterKeyword }), 350);
+    });
+    if (channelSort) {
             channelSort.value = channelSortKey;
             channelSort.addEventListener('change', e => {
                 channelSortKey = e.target.value;
@@ -3034,6 +3318,7 @@ function getCategoryTag(cat) {
 
         applyTheme(currentTheme());
         restoreAutoRefresh();
+        loadSettings();
         // 自动探活在任意页面后台倒计时（浏览器需保持打开）
         restoreProbeAuto();
         loadDashboard();

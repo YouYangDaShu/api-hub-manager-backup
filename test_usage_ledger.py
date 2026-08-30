@@ -28,6 +28,20 @@ class UsageLedgerTests(unittest.TestCase):
                 saved = json.loads(ledger_file.read_text(encoding="utf-8"))
                 self.assertEqual(saved["sy"]["total_cost"], 37.794)
 
+    def test_reset_account_uses_current_upstream_total(self):
+        with tempfile.TemporaryDirectory() as td:
+            ledger_file = Path(td) / "usage_ledger.json"
+            ledger_file.write_text(json.dumps({"ebd3907b": {
+                "total_cost": 343.0423,
+                "last_upstream_total": 32.562,
+                "reset_count": 10,
+            }}), encoding="utf-8")
+            with patch.object(routes, "USAGE_LEDGER_FILE", ledger_file):
+                current = [{"id": "ebd3907b", "total_cost": 32.562}]
+                routes._attach_usage_ledger(current)
+                self.assertEqual(current[0]["total_cost"], 32.562)
+                saved = json.loads(ledger_file.read_text(encoding="utf-8"))
+                self.assertEqual(saved["ebd3907b"]["reset_count"], 0)
     def test_daily_snapshot_does_not_reduce_after_log_cleanup(self):
         with tempfile.TemporaryDirectory() as td:
             history_file = Path(td) / "usage_history.json"
