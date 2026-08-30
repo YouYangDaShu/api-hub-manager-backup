@@ -156,30 +156,16 @@ class NewAPIAdapter(BaseAdapter):
             if isinstance(login_data, dict) and login_data.get("require_2fa"):
                 raise ValueError("该账号启用了两步验证，暂不支持")
 
-            # NewAPI variants may return either a legacy session cookie or a
-            # JWT access_token in the response body. Prefer the JWT when present;
-            # a refresh-only cookie cannot authenticate /api/user/self.
-            if isinstance(login_data, dict):
-                body_token = str(login_data.get("access_token") or "").strip()
-                user_data = login_data.get("user") or {}
-                if isinstance(user_data, dict):
-                    self.user_id = str(user_data.get("id", ""))
-                if not self.user_id:
-                    self.user_id = str(login_data.get("id", ""))
-                if body_token:
-                    self.credential_type = "bearer"
-                    self.cookie = ""
-                    self.access_token = body_token
-                    return body_token
-
-            # Legacy NewAPI: authentication is carried by the returned cookie.
+            # 提取 cookie
             cookies = dict(resp.cookies)
             cookie_str = "; ".join(f"{k}={v}" for k, v in cookies.items())
-            if not cookie_str:
-                raise ValueError("登录成功但未获取到可用凭据")
-            self.credential_type = "cookie"
+
+            # 提取 user_id
+            if isinstance(login_data, dict):
+                self.user_id = str(login_data.get("id", ""))
+
             self.cookie = cookie_str
-            self.access_token = cookie_str
+            self.access_token = cookie_str  # 存储用于持久化
             return cookie_str
 
     def _headers(self) -> dict[str, str]:

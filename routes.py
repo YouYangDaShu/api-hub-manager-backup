@@ -1,11 +1,9 @@
 """后端 API 路由"""
 import asyncio
 import json
-import os
-import sqlite3
 import time
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -51,18 +49,6 @@ class SettingsUpdate(BaseModel):
     hub_password: str | None = None
     hub_api_key: str | None = None  # 可选：Admin x-api-key，优先于邮箱密码
     ultra_low_rate: float | None = None  # 超低价阈值，低于此倍率为超低价
-    show_channel_groups: bool | None = None
-    show_consumption_chart: bool | None = None
-    show_ratio_table: bool | None = None
-    show_today_dataset: bool | None = None
-    show_total_dataset: bool | None = None
-    mask_channel_urls: bool | None = None
-    group_filter_keyword: str | None = None
-
-
-class DashboardAutoRefreshUpdate(BaseModel):
-    enabled: bool
-    interval: int = 300
 
 
 # === 数据持久化 ===
@@ -97,43 +83,6 @@ _cache: dict[str, dict[str, Any]] = {}
 DASHBOARD_DISK_CACHE = DATA_DIR / "dashboard_cache.json"
 USAGE_HISTORY_FILE = DATA_DIR / "usage_history.json"
 USAGE_LEDGER_FILE = DATA_DIR / "usage_ledger.json"
-SITE_BILLING_DB = Path(os.environ.get("NEWAPI_DB", "/home/youyang/projects/services/new-api/data/one-api.db"))
-SITE_REVENUE_ADJUSTMENTS = DATA_DIR / "site_revenue_adjustments.json"
-
-# 生产 New API 中已核对过归属的多渠道账号。只保存 channel_id，不保存任何 API key。
-def _load_channel_mapping():
-    """从外部文件加载渠道 ID 映射配置（如果存在）"""
-    mapping_file = DATA_DIR / "channel_mapping.json"
-    if mapping_file.exists():
-        try:
-            data = json.loads(mapping_file.read_text(encoding="utf-8"))
-            # 转换为 tuple 格式以保持兼容性
-            return {k: tuple(v) if isinstance(v, list) else v for k, v in data.items()}
-        except Exception as e:
-            print(f"⚠️  加载 channel_mapping.json 失败: {e}")
-    # 默认配置（保持向后兼容）
-    return {
-        "926d2a81": (63, 64, 73),       # 莫比乌斯（2chat 同一登录账号，含 chat2api）
-        "f6506b67": (89, 97, 103),      # 板栗（banliapi.top 同一登录账号）
-        "2734859e": (95, 102, 104),     # coco（sub-coco.org，含 coco 自建/PRO）
-        "bb065c1c": (79,),               # 凉介（dreamaitoken.cloud，含 plus 稳定）
-        "7d5b654c": (46, 98, 107),          # DC（GPT + AWS-Claude-High + AWS-Claude；107 为旧 GPT 渠道重建后的新 ID）
-        "d8d50eee": (87, 106),          # SY（mxamaxai.com，含 sy 小铺 PRO）
-        "b0d14b19": (56,),          # 汇流副号（304...）
-        "ebd3907b": (29,),               # 词元（mathmodel pro）
-        "100de40f": (92,),               # 蛋炒饭（proxygpt.cc.cd）
-        "2212f6bb": (101,),              # Jay（同一公网站）
-        "6d0226c3": (71,),          # 汇流主号（197...，多 Key 渠道）
-    }
-
-SITE_CHANNEL_IDS_BY_ACCOUNT = _load_channel_mapping()
-# 仅指定业务日修正“今日收入”的账号归属，不改原始流水、昨日或累计收入。
-# 2026-08-27 已核对：渠道 71 的当天调用实际消耗汇流副号余额。
-SITE_DAILY_CHANNEL_ATTRIBUTION_OVERRIDES = {
-    "2026-08-27": {
-        71: "b0d14b19",
-    },
-}
 
 CACHE_TTL_DASHBOARD = 300  # 仪表盘缓存 5 分钟
 CACHE_TTL_ACCOUNT = 180    # 单个账号缓存 3 分钟
@@ -141,9 +90,6 @@ CACHE_TTL_ACCOUNT = 180    # 单个账号缓存 3 分钟
 # 后台刷新状态：防止并发 force 刷新互相踩踏
 _refresh_lock = asyncio.Lock()
 _refreshing = False
-_dashboard_refresh_last_error = ""
-_dashboard_refresh_last_error_at = 0
-DASHBOARD_REFRESH_INTERVALS = {300, 600, 1800}
 
 
 def _cache_get(key: str, ttl: int) -> Any | None:
@@ -237,18 +183,6 @@ def _attach_usage_ledger(account_summaries: list[dict[str, Any]]) -> None:
             "last_upstream_total": None,
             "reset_count": 0,
         })
-        # 汇流和词元的上游 total_cost 会周期性重置；这里不再把重置前历史继续叠加到当前值。
-        # 这些账号的累计消费口径以当前上游 used_quota 为准，避免刷新一次就再次累加旧账。
-        if account_id in {"b0d14b19", "6d0226c3", "ebd3907b"}:
-            row["total_cost"] = round(upstream_value, 4)
-            row["last_upstream_total"] = upstream_value
-            row["last_seen_at"] = int(time.time())
-            row["reset_count"] = 0
-            row["baseline_source"] = "upstream_used_quota_current"
-            summary["total_cost"] = round(upstream_value, 4)
-            changed = True
-            continue
-
         local_total = max(0.0, float(row.get("total_cost", 0.0) or 0.0))
         financial = summary.get("financial_baseline") or {}
         if financial.get("total_recharged") is not None and financial.get("balance") is not None:
@@ -336,125 +270,9 @@ def _attach_usage_history(account_summaries: list[dict[str, Any]]) -> None:
     except OSError:
         pass
 
+
 # 模块导入时立刻尝试加载磁盘缓存
 _load_dashboard_disk_cache()
-
-
-def _load_revenue_adjustments() -> dict[str, dict[str, Any]]:
-    if not SITE_REVENUE_ADJUSTMENTS.exists():
-        return {}
-    try:
-        data = json.loads(SITE_REVENUE_ADJUSTMENTS.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
-    except (json.JSONDecodeError, OSError, TypeError):
-        return {}
-
-
-def _site_revenue_now() -> datetime:
-    """可注入的本站财务时间，使用服务器本地业务时区。"""
-    return datetime.now().astimezone()
-
-
-def _attach_site_revenue(account_summaries: list[dict[str, Any]]) -> dict[str, float | None]:
-    """按已确认的渠道 ID/精确 Key，附加今日及累计本站收入。"""
-    for summary in account_summaries:
-        summary["site_revenue"] = None
-        summary["site_revenue_total"] = None
-        summary["site_profit"] = None
-        summary["site_profit_total"] = None
-        summary["site_revenue_status"] = "未配置上游Key"
-
-    empty_totals = {"today_revenue": None, "total_revenue": None}
-    if not SITE_BILLING_DB.exists():
-        for summary in account_summaries:
-            summary["site_revenue_status"] = "收入库不可用"
-        return empty_totals
-
-    try:
-        local_now = _site_revenue_now()
-        start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = start + timedelta(days=1)
-        with sqlite3.connect(f"file:{SITE_BILLING_DB}?mode=ro", uri=True) as conn:
-            qpu_row = conn.execute("SELECT value FROM options WHERE key = 'QuotaPerUnit'").fetchone()
-            qpu = float(qpu_row[0]) if qpu_row and float(qpu_row[0]) > 0 else 500000.0
-            rows = conn.execute(
-                """
-                SELECT c.id, c.key,
-                    COALESCE(SUM(CASE WHEN l.created_at >= ? AND l.created_at < ? THEN l.quota ELSE 0 END), 0),
-                    COALESCE(SUM(l.quota), 0)
-                FROM logs l JOIN channels c ON c.id = l.channel_id
-                WHERE l.type = 2 AND l.quota > 0
-                GROUP BY c.id, c.key
-                """,
-                (int(start.timestamp()), int(end.timestamp())),
-            ).fetchall()
-    except (OSError, sqlite3.Error, TypeError, ValueError):
-        for summary in account_summaries:
-            summary["site_revenue_status"] = "收入读取失败"
-        return empty_totals
-
-    def amount(value: Any) -> float:
-        return max(0.0, float(value or 0)) / qpu
-
-    revenue_by_key = {str(key): (amount(today), amount(total)) for _, key, today, total in rows if key}
-    revenue_by_channel = {int(channel_id): (amount(today), amount(total)) for channel_id, _, today, total in rows}
-    daily_overrides = SITE_DAILY_CHANNEL_ATTRIBUTION_OVERRIDES.get(local_now.date().isoformat(), {})
-    override_today_by_account: dict[str, float] = {}
-    for channel_id, target_account_id in daily_overrides.items():
-        override_today_by_account[target_account_id] = (
-            override_today_by_account.get(target_account_id, 0.0)
-            + revenue_by_channel.get(channel_id, (0.0, 0.0))[0]
-        )
-    revenue_adjustments = _load_revenue_adjustments()
-    matched_today = 0.0
-    matched_total = 0.0
-    for summary in account_summaries:
-        account_id = str(summary.get("id") or "")
-        mapped_channel_ids = SITE_CHANNEL_IDS_BY_ACCOUNT.get(account_id)
-        if mapped_channel_ids is not None:
-            today = sum(
-                revenue_by_channel.get(cid, (0.0, 0.0))[0]
-                for cid in mapped_channel_ids
-                if cid not in daily_overrides
-            )
-            total = sum(revenue_by_channel.get(cid, (0.0, 0.0))[1] for cid in mapped_channel_ids)
-            match_status = f"已按本站渠道ID匹配 {len(mapped_channel_ids)} 条"
-        else:
-            key = str(summary.get("upstream_key") or "")
-            if not key:
-                continue
-            today, total = revenue_by_key.get(key, (0.0, 0.0))
-            match_status = "已按上游Key匹配" if key in revenue_by_key else "已匹配，今日无本站收入"
-        override_today = override_today_by_account.get(account_id, 0.0)
-        if override_today:
-            today += override_today
-            match_status += f" + 仅{local_now.date().isoformat()}今日归属修正"
-        adjustment = revenue_adjustments.get(account_id) or {}
-        manual_total = max(0.0, float(adjustment.get("historical_revenue", 0) or 0))
-        total += manual_total
-        if manual_total:
-            match_status += " + 历史补账"
-        summary["site_revenue"] = round(today, 4)
-        summary["site_revenue_total"] = round(total, 4)
-        today_cost = summary.get("today_cost")
-        total_cost = summary.get("total_cost")
-        summary["site_profit"] = round(today - float(today_cost), 4) if today_cost is not None else None
-        summary["site_profit_total"] = round(total - float(total_cost), 4) if total_cost is not None else None
-        summary["site_revenue_status"] = match_status
-        matched_today += today
-        matched_total += total
-
-    # 顶部收入必须和 Hub 渠道成本使用同一归属集合，避免把未归属流水算进利润。
-    return {"today_revenue": round(matched_today, 4),
-            "total_revenue": round(matched_total, 4),
-            "site_today_revenue": round(sum(amount(row[2]) for row in rows), 4),
-            "site_total_revenue": round(sum(amount(row[3]) for row in rows), 4),
-            "matched_today": round(matched_today, 4),
-            "matched_total": round(matched_total, 4)}
-
-
-# === 账号管理 ===
-
 
 def _get_adapter(account: dict):
     """根据平台类型获取对应的适配器"""
@@ -471,7 +289,7 @@ def _get_adapter(account: dict):
         adapter = NewAPIAdapter(base_url, token, credential_type=cred_type)
         if account.get("user_id"):
             adapter.user_id = account["user_id"]
-    return adapter
+        return adapter
 
 
 # 单渠道整体拉取超时上限（秒）：防止某个挂掉/极慢的中转站拖垮整个仪表盘
@@ -489,7 +307,6 @@ async def _account_summary(account: dict) -> dict[str, Any]:
         "id": account["id"], "name": account["name"], "platform": account["platform"],
         "base_url": account["base_url"], "recharge_ratio": rr,
         "credential_type": account.get("credential_type", "token"),
-        "upstream_key": account.get("upstream_key", ""),
         # 渠道级上游 Key（不含分组级）；分组级在扫描时再判
         "has_upstream_key": bool(_looks_like_api_key(account.get("upstream_key", "") or "")),
     }
@@ -919,7 +736,7 @@ async def refresh_token(account_id: str):
                     acc["user_id"] = adapter.user_id
                 # 校正凭据类型
                 if acc.get("platform") == "newapi":
-                    acc["credential_type"] = getattr(adapter, "credential_type", "cookie")
+                    acc["credential_type"] = "cookie"
                 elif acc.get("platform") == "sub2api":
                     acc["credential_type"] = "bearer"
                 break
@@ -996,9 +813,6 @@ async def _build_dashboard(force_snapshot: bool = False) -> dict[str, Any]:
     ))
     _attach_usage_ledger(account_summaries)
     _attach_usage_history(account_summaries)
-    revenue_totals = _attach_site_revenue(account_summaries)
-    for summary in account_summaries:
-        summary.pop("upstream_key", None)
 
     for s in account_summaries:
         # 注意：余额/消耗为 0 是合法值，不能用 truthy 判断
@@ -1024,16 +838,6 @@ async def _build_dashboard(force_snapshot: bool = False) -> dict[str, Any]:
         "total_balance": round(total_balance, 4),
         "today_cost": round(today_cost, 4),
         "total_cost": round(total_cost, 4),
-        "today_revenue": revenue_totals.get("site_today_revenue"),
-        "total_revenue": revenue_totals.get("site_total_revenue"),
-        "attributed_today_revenue": revenue_totals.get("matched_today"),
-        "attributed_total_revenue": revenue_totals.get("matched_total"),
-        "unmatched_today_revenue": round(
-            (revenue_totals.get("site_today_revenue") or 0) - (revenue_totals.get("matched_today") or 0), 4
-        ),
-        "unmatched_total_revenue": round(
-            (revenue_totals.get("site_total_revenue") or 0) - (revenue_totals.get("matched_total") or 0), 4
-        ),
         "account_count": len(accounts),
         "error_count": error_count,
         "accounts": account_summaries,
@@ -1046,48 +850,6 @@ async def _build_dashboard(force_snapshot: bool = False) -> dict[str, Any]:
     if force_snapshot:
         _save_snapshot_to_history()
     return result
-
-
-async def _refresh_dashboard_cache(force_snapshot: bool = True) -> dict[str, Any]:
-    """Refresh the shared dashboard cache once, serializing all callers."""
-    global _refreshing, _dashboard_refresh_last_error, _dashboard_refresh_last_error_at
-    async with _refresh_lock:
-        _refreshing = True
-        try:
-            result = await _build_dashboard(force_snapshot=force_snapshot)
-            _dashboard_refresh_last_error = ""
-            _dashboard_refresh_last_error_at = 0
-            return result
-        except Exception as exc:
-            _dashboard_refresh_last_error = str(exc)[:300]
-            _dashboard_refresh_last_error_at = int(time.time())
-            raise
-        finally:
-            _refreshing = False
-
-
-async def dashboard_cache_refresh_loop():
-    """Keep dashboard balances/usage warm even when no browser is open."""
-    await asyncio.sleep(15)
-    while True:
-        settings = _load_settings()
-        enabled = bool(settings.get("dashboard_auto_refresh_enabled", True))
-        try:
-            interval = int(settings.get("dashboard_auto_refresh_interval", 300) or 300)
-        except (TypeError, ValueError):
-            interval = 300
-        if interval not in DASHBOARD_REFRESH_INTERVALS:
-            interval = 300
-
-        cached = _cache.get("dashboard", {})
-        cache_age = time.time() - float(cached.get("ts", 0) or 0)
-        if enabled and not _refresh_lock.locked() and cache_age >= interval:
-            try:
-                await _refresh_dashboard_cache(force_snapshot=True)
-            except Exception as exc:
-                _refresh_log(f"仪表盘后台刷新失败: {exc}")
-
-        await asyncio.sleep(15 if enabled else 30)
 
 
 @router.get("/dashboard")
@@ -1104,24 +866,6 @@ async def dashboard(force: bool = Query(False, description="强制刷新，忽�
         cached = _cache.get(cache_key, {}).get("data")
         if cached and cached.get("accounts") is not None and not cached.get("empty"):
             out = dict(cached)
-            account_keys = {str(a.get("id")): a.get("upstream_key", "") for a in _load_accounts()}
-            cached_accounts = [dict(a) for a in out.get("accounts", [])]
-            for account in cached_accounts:
-                account["upstream_key"] = account_keys.get(str(account.get("id")), "")
-            cached_revenue_totals = _attach_site_revenue(cached_accounts)
-            for account in cached_accounts:
-                account.pop("upstream_key", None)
-            out["accounts"] = cached_accounts
-            out["today_revenue"] = cached_revenue_totals.get("site_today_revenue")
-            out["total_revenue"] = cached_revenue_totals.get("site_total_revenue")
-            out["attributed_today_revenue"] = cached_revenue_totals.get("matched_today")
-            out["attributed_total_revenue"] = cached_revenue_totals.get("matched_total")
-            out["unmatched_today_revenue"] = round(
-                (cached_revenue_totals.get("site_today_revenue") or 0) - (cached_revenue_totals.get("matched_today") or 0), 4
-            )
-            out["unmatched_total_revenue"] = round(
-                (cached_revenue_totals.get("site_total_revenue") or 0) - (cached_revenue_totals.get("matched_total") or 0), 4
-            )
             out["from_cache"] = True
             out["refreshing"] = _refreshing
             return {"success": True, "data": out}
@@ -1146,61 +890,26 @@ async def dashboard(force: bool = Query(False, description="强制刷新，忽�
         out["refreshing"] = True
         return {"success": True, "data": out}
 
-    try:
-        result = await _refresh_dashboard_cache(force_snapshot=True)
-        return {"success": True, "data": result}
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"仪表盘刷新失败: {exc}")
+    async with _refresh_lock:
+        _refreshing = True
+        try:
+            result = await _build_dashboard(force_snapshot=True)
+            return {"success": True, "data": result}
+        finally:
+            _refreshing = False
 
 
 @router.get("/dashboard/status")
 async def dashboard_status():
-    """Lightweight cache/refresh state for the header controls."""
-    cached_entry = _cache.get("dashboard", {})
-    cached = cached_entry.get("data") or {}
-    settings = _load_settings()
-    try:
-        interval = int(settings.get("dashboard_auto_refresh_interval", 300) or 300)
-    except (TypeError, ValueError):
-        interval = 300
-    if interval not in DASHBOARD_REFRESH_INTERVALS:
-        interval = 300
-    cached_at = int(cached.get("cached_at", 0) or 0)
-    age = max(0, int(time.time()) - cached_at) if cached_at else None
-    next_refresh_in = max(0, interval - age) if age is not None else 0
+    """轻量状态：前端轮询是否还在后台刷新"""
+    cached = _cache.get("dashboard", {}).get("data")
     return {
         "success": True,
         "data": {
             "refreshing": _refreshing,
-            "has_cache": bool(cached.get("accounts")),
-            "cached_at": cached_at,
-            "cache_age": age,
-            "auto_refresh_enabled": bool(settings.get("dashboard_auto_refresh_enabled", True)),
-            "auto_refresh_interval": interval,
-            "next_refresh_in": next_refresh_in,
-            "last_error": _dashboard_refresh_last_error,
-            "last_error_at": _dashboard_refresh_last_error_at,
+            "has_cache": bool(cached and cached.get("accounts")),
+            "cached_at": (cached or {}).get("cached_at", 0),
         },
-    }
-
-
-@router.post("/dashboard/auto-refresh")
-async def update_dashboard_auto_refresh(req: DashboardAutoRefreshUpdate):
-    """Persist the server-side dashboard refresh switch and interval."""
-    interval = int(req.interval or 300)
-    if interval not in DASHBOARD_REFRESH_INTERVALS:
-        raise HTTPException(status_code=400, detail="刷新间隔仅支持 5、10 或 30 分钟")
-    settings = _load_settings()
-    settings["dashboard_auto_refresh_enabled"] = bool(req.enabled)
-    settings["dashboard_auto_refresh_interval"] = interval
-    _save_settings(settings)
-    return {
-        "success": True,
-        "data": {
-            "auto_refresh_enabled": bool(req.enabled),
-            "auto_refresh_interval": interval,
-        },
-        "message": "后台自动刷新设置已保存",
     }
 
 
@@ -1234,13 +943,6 @@ async def get_settings():
             "hub_api_key_set": bool(hub_key),
             "hub_api_key_masked": hub_key_masked,
             "ultra_low_rate": settings.get("ultra_low_rate", 0.6),
-            "show_channel_groups": settings.get("show_channel_groups", True),
-            "show_consumption_chart": settings.get("show_consumption_chart", True),
-            "show_ratio_table": settings.get("show_ratio_table", True),
-            "show_today_dataset": settings.get("show_today_dataset", True),
-            "show_total_dataset": settings.get("show_total_dataset", True),
-            "mask_channel_urls": settings.get("mask_channel_urls", False),
-            "group_filter_keyword": settings.get("group_filter_keyword", ""),
         },
     }
 
@@ -1261,19 +963,6 @@ async def update_settings(req: SettingsUpdate):
         settings["hub_api_key"] = req.hub_api_key
     if req.ultra_low_rate is not None:
         settings["ultra_low_rate"] = req.ultra_low_rate
-    for key in (
-        "show_channel_groups",
-        "show_consumption_chart",
-        "show_ratio_table",
-        "show_today_dataset",
-        "show_total_dataset",
-        "mask_channel_urls",
-    ):
-        value = getattr(req, key)
-        if value is not None:
-            settings[key] = value
-    if req.group_filter_keyword is not None:
-        settings["group_filter_keyword"] = req.group_filter_keyword.strip()[:64]
     _save_settings(settings)
     return {"success": True, "message": "设置已保存"}
 
@@ -2458,9 +2147,9 @@ async def run_all_probes(only_enabled: bool = Query(True)):
 
 # === Token 自动续期后台任务 ===
 
-# 扫描周期需覆盖短期 token（AI8 当前约 30 分钟），并给临时登录失败留重试窗口。
-AUTO_REFRESH_INTERVAL = 10 * 60
-AUTO_REFRESH_THRESHOLD = 20 * 60
+# 扫描周期与续期阈值：周期远小于 24h token 寿命，保证一次失败后仍有多次重试机会
+AUTO_REFRESH_INTERVAL = 6 * 3600
+AUTO_REFRESH_THRESHOLD = 8 * 3600
 AUTO_REFRESH_LOG = DATA_DIR / "token_refresh.log"
 
 
@@ -2532,11 +2221,7 @@ async def _refresh_one(account: dict) -> tuple[bool, str]:
             account["refresh_token"] = adapter.refresh_token
         if getattr(adapter, "user_id", ""):
             account["user_id"] = adapter.user_id
-        account["credential_type"] = (
-            getattr(adapter, "credential_type", "cookie")
-            if platform == "newapi"
-            else "bearer"
-        )
+        account["credential_type"] = "cookie" if platform == "newapi" else "bearer"
         return True, "账号密码重登"
     except Exception as e:
         return False, f"登录失败: {e}"

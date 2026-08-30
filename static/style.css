@@ -440,32 +440,18 @@ html[data-theme="dark"] .nav-btn.active {
 /* === STATS === */
 .stats-row {
   display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 22px;
 }
 
-@media (max-width: 1199px) {
-  .stats-row {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 699px) {
-  .stats-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-}
-
 .stat-box {
   position: relative;
-  overflow: visible;
-  min-width: 0;
+  overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 16px 12px;
+  padding: 18px 20px;
   box-shadow: var(--shadow-sm);
   transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
 }
@@ -493,9 +479,6 @@ html[data-theme="dark"] .nav-btn.active {
   font-weight: 650;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  line-height: 1.35;
-  white-space: normal;
-  overflow-wrap: anywhere;
 }
 
 .stat-box .num {
@@ -587,27 +570,15 @@ html[data-theme="dark"] .nav-btn.active {
     color-mix(in srgb, var(--surface-2) 70%, transparent),
     transparent
   );
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
-.ch-info-main {
+.ch-info {
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
   flex-wrap: wrap;
-  flex: 1 1 auto;
-}
-
-.ch-info-main .ch-members {
-  flex-basis: 100%;
-}
-
-.ch-info-main .ch-url {
-  flex: 1 1 100%;
-  width: 100%;
-  max-width: none;
-  min-width: 0;
 }
 
 .ch-name {
@@ -670,39 +641,12 @@ html[data-theme="dark"] .tag-sub2api {
 .ch-actions {
   display: flex;
   gap: 6px;
-  flex: 0 0 auto;
-  flex-wrap: nowrap;
-  white-space: nowrap;
-  align-items: center;
-}
-
-.ch-actions .btn {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
-@media (max-width: 760px) {
-  .ch-top {
-    flex-wrap: wrap;
-    align-items: flex-start;
-  }
-
-  .ch-info-main {
-    flex: 1 1 100%;
-    width: 100%;
-  }
-
-  .ch-actions {
-    flex: 1 1 100%;
-    width: 100%;
-    overflow-x: auto;
-    padding-bottom: 2px;
-  }
+  flex-wrap: wrap;
 }
 
 .ch-metrics {
   display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   border-bottom: 1px solid var(--border-light);
 }
 
@@ -733,48 +677,8 @@ html[data-theme="dark"] .tag-sub2api {
   color: var(--success);
 }
 
-.ch-metric .val.red {
-  color: var(--danger);
-}
-
 .ch-metric .val.orange {
   color: var(--warning);
-}
-
-.merged-account-metrics {
-  grid-template-columns: repeat(9, minmax(0, 1fr));
-}
-
-.merged-account-metrics .ch-metric {
-  min-width: 0;
-  padding: 12px 10px;
-}
-
-.merged-account-metrics .ch-metric .label {
-  font-size: 10px;
-  white-space: nowrap;
-}
-
-.merged-account-metrics .ch-metric .val {
-  font-size: 16px;
-}
-
-.merged-balance-cell {
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.merged-balance-cell:hover {
-  background: var(--primary-soft);
-}
-
-.merged-account-metrics .merged-balance-cell:first-child {
-  padding-left: 20px;
-}
-
-.merged-account-actions {
-  flex-wrap: wrap;
-  justify-content: flex-end;
 }
 
 .ch-groups {
@@ -1654,6 +1558,7 @@ html[data-theme="dark"] .tag-other {
 
 /* === RESPONSIVE === */
 @media (max-width: 980px) {
+  .stats-row,
   .skeleton-grid {
     grid-template-columns: repeat(2, 1fr);
   }
