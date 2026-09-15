@@ -12,21 +12,27 @@ import os
 import re
 import secrets
 import sqlite3
+from functools import cmp_to_key
 import time
 import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Query
 
 DB_PATH = Path(os.getenv("NEWAPI_DB", "/home/youyang/projects/services/new-api/data/one-api.db"))
 STATE_PATH = Path(os.getenv(
     "CHANNEL_MONITOR_STATE",
     "/home/youyang/projects/web-apps/main/channel-monitor/monitor-state.json",
 ))
+LOG_PATH = Path(os.getenv(
+    "PRIORITY_ADJUST_LOG",
+    str(STATE_PATH.with_name("priority-adjust-log.json")),
+))
 ADMIN_TOKEN = os.getenv("CHANNEL_MONITOR_TOKEN", "")
 DEFAULT_MONITOR_MODEL = "gpt-5.6-terra"
+MAX_ACTION_LOG = 2000
 router = APIRouter(prefix="/channel-monitor", tags=["channel-monitor"])
 
 # Stable keys are persisted in data/settings.json; labels are presentation-only.
@@ -40,30 +46,53 @@ COMBINATION_OPTIONS: tuple[dict[str, str], ...] = (
     {"key": "other", "label": "其他"},
 )
 DEFAULT_COMBINATION_ORDER: tuple[str, ...] = tuple(x["key"] for x in COMBINATION_OPTIONS)
-COMBINATION_LABELS = {x["key"]: x["label"] for x in COMBINATION_OPTIONS}
 
 
-def normalize_combination_order(value: Any) -> list[str]:
-    """Return the default order unless a stored value is a complete valid order."""
-    if not isinstance(value, list) or len(value) != len(DEFAULT_COMBINATION_ORDER):
-        return list(DEFAULT_COMBINATION_ORDER)
-    if any(not isinstance(x, str) for x in value) or len(set(value)) != len(value):
-        return list(DEFAULT_COMBINATION_ORDER)
-    if set(value) != set(DEFAULT_COMBINATION_ORDER):
-        return list(DEFAULT_COMBINATION_ORDER)
-    return list(value)
+def list_channel_group_names() -> list[str]:
+    """Return every enabled pool currently present in New API abilities."""
+    con = db_connect()
+    try:
+        rows = con.execute(
+            'SELECT DISTINCT TRIM(a."group") '
+            'FROM abilities a JOIN channels c ON c.id=a.channel_id '
+            'WHERE a.enabled=1 AND c.status=1 AND LENGTH(TRIM(a."group"))>0 '
+            'ORDER BY TRIM(a."group") COLLATE NOCASE'
+        ).fetchall()
+    finally:
+        con.close()
+    names = [str(row[0]) for row in rows if row and str(row[0]).strip()]
+    preferred = [
+        "gpt plus 号池",
+        "gpt plus 稳定",
+        "gpt plus/pro 混池",
+        "gpt pro20x 号池",
+    ]
+    rank = {name: index for index, name in enumerate(preferred)}
+    return sorted(names, key=lambda name: (rank.get(name, len(preferred)), name.casefold()))
 
 
-def validate_combination_order(value: Any) -> list[str]:
-    """Validate a submitted order and append omitted known categories."""
+def combination_options() -> list[dict[str, str]]:
+    return [{"key": name, "label": name} for name in list_channel_group_names()]
+
+
+def normalize_combination_order(value: Any, available: list[str] | None = None) -> list[str]:
+    known = available if available is not None else list(DEFAULT_COMBINATION_ORDER)
+    saved = value if isinstance(value, list) else []
+    result = [x for x in saved if isinstance(x, str) and x in known]
+    result = list(dict.fromkeys(result))
+    return result + [x for x in known if x not in result]
+
+
+def validate_combination_order(value: Any, available: list[str] | None = None) -> list[str]:
     if not isinstance(value, list) or any(not isinstance(x, str) for x in value):
         raise ValueError("channel_combination_order 必须是字符串数组")
-    known = set(DEFAULT_COMBINATION_ORDER)
+    ordered_known = available if available is not None else list(DEFAULT_COMBINATION_ORDER)
+    known = set(ordered_known)
     if any(x not in known for x in value):
         raise ValueError("channel_combination_order 包含未知类别")
     if len(set(value)) != len(value):
         raise ValueError("channel_combination_order 不允许重复类别")
-    return value + [x for x in DEFAULT_COMBINATION_ORDER if x not in value]
+    return value + [x for x in ordered_known if x not in value]
 
 def db_connect(read_only: bool = True) -> sqlite3.Connection:
     if read_only:
@@ -117,7 +146,6 @@ def channel_row(row: tuple[Any, ...]) -> dict[str, Any]:
 
 
 def classify_combination(item: dict[str, Any]) -> str:
-    """Return a stable combination key from channel metadata."""
     text = " ".join([
         str(item.get("group", "")), str(item.get("name", "")),
         " ".join(item.get("models", []) or []), str(item.get("test_model", "")),
@@ -126,7 +154,6 @@ def classify_combination(item: dict[str, Any]) -> str:
     plus = bool(re.search(r"\bplus\b", text))
     p20 = bool(re.search(r"(?:\bp20\b|pro20x)", text))
     mixed = bool(re.search(r"(?:\bmix(?:ed)?\b|混合)", text))
-    # \bpro\b recognizes GPT-PRO and Chinese-separated "pro" but not profile.
     pro = bool(re.search(r"\bpro\b", text)) or bool(re.search(r"pro20x", text))
     if pro and stable and p20 and not plus:
         return "pro_stable_p20"
@@ -144,45 +171,39 @@ def classify_combination(item: dict[str, Any]) -> str:
 
 
 def channel_combination_rank(item: dict[str, Any], order: list[str] | None = None) -> int:
-    """Return the one-based position used by API and UI sorting."""
     effective_order = order or list(DEFAULT_COMBINATION_ORDER)
-    key = classify_combination(item)
     try:
+        group_name = str(item.get("group") or "").strip()
+        key = group_name if group_name in effective_order else classify_combination(item)
         return effective_order.index(key) + 1
     except ValueError:
         return len(effective_order) + 1
 
 
 def get_combination_order() -> list[str]:
-    """Read the persisted order without importing routes at module load time."""
     try:
         from routes import _load_settings
-        return normalize_combination_order(_load_settings().get("channel_combination_order"))
+        return normalize_combination_order(
+            _load_settings().get("channel_combination_order"),
+            list_channel_group_names(),
+        )
     except Exception:
         return list(DEFAULT_COMBINATION_ORDER)
 
 
-def _safe_owner_metadata(channel_id: int) -> dict[str, Any]:
+def _owner_metadata(channel_id: int) -> dict[str, Any]:
     try:
         from routes import get_channel_ownership, _account_names, SITE_CHANNEL_IDS_BY_ACCOUNT
         item = get_channel_ownership(channel_id)
-        if not item:
-            static = [str(account_id) for account_id, ids in SITE_CHANNEL_IDS_BY_ACCOUNT.items() if channel_id in ids]
-            if len(static) == 1:
-                names = _account_names()
-                if static[0] in names:
-                    return {"owner_account_id": static[0], "owner_account_name": names.get(static[0]), "owner_source": "channel_id", "source": "channel_id"}
-            return {"owner_account_id": None, "owner_account_name": None, "owner_source": None, "source": None}
-        owner_id = str(item.get("owner_account_id") or "")
-        return {
-            "owner_account_id": owner_id or None,
-            "owner_account_name": _account_names().get(owner_id) if owner_id else None,
-            "owner_source": item.get("source") or "manual",
-            "source": item.get("source") or "manual",
-            "owner_updated_at": item.get("updated_at") or None,
-        }
+        if item:
+            owner_id = str(item.get("owner_account_id") or "")
+            return {"owner_account_id": owner_id or None, "owner_account_name": _account_names().get(owner_id), "owner_source": "manual"}
+        static = [str(account_id) for account_id, ids in SITE_CHANNEL_IDS_BY_ACCOUNT.items() if channel_id in ids]
+        if len(static) == 1 and static[0] in _account_names():
+            return {"owner_account_id": static[0], "owner_account_name": _account_names()[static[0]], "owner_source": "channel_id"}
     except Exception:
-        return {"owner_account_id": None, "owner_account_name": None, "owner_source": None, "source": None}
+        pass
+    return {"owner_account_id": None, "owner_account_name": None, "owner_source": None}
 
 
 def history_since(history: list[dict[str, Any]], cutoff: datetime) -> list[dict[str, Any]]:
@@ -200,6 +221,507 @@ def availability(history: list[dict[str, Any]]) -> float | None:
     if not history:
         return None
     return round(sum(bool(item.get("ok")) for item in history) / len(history) * 100, 1)
+
+
+# Routing consumes this Hub's existing monitor history. It never issues probes.
+ROUTING_PRIORITY_RANGES = {
+    "gpt plus 号池": (50, 59),
+    "gpt plus 稳定": (40, 49),
+    "gpt plus/pro 混池": (30, 39),
+    "GPT 企业级线路": (15, 19),
+    "gpt pro20x 号池": (20, 29),
+    "grok havey": (11, 12),
+}
+TICK_SLOW_MS = 6000
+
+
+def sample_tick(sample: dict[str, Any]) -> str:
+    """Same colors as the Hub timeline: green <6s, yellow slow-ok, red fail."""
+    if not sample.get("ok"):
+        return "bad"
+    if float(sample.get("latency_ms") or 0) >= TICK_SLOW_MS:
+        return "degraded"
+    return "ok"
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    return default if value is None else value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def routing_score_config() -> dict[str, Any]:
+    return {
+        "enabled": _env_bool("ROUTING_SCORE_ENABLED"),
+        "auto_apply": _env_bool("ROUTING_SCORE_AUTO_APPLY"),
+        "allow_write": _env_bool("ROUTING_SCORE_ALLOW_WRITE"),
+        "min_samples": max(1, int(os.getenv("ROUTING_SCORE_MIN_SAMPLES", "2"))),
+        "stability_samples": max(1, int(os.getenv("ROUTING_SCORE_STABILITY_SAMPLES", "5"))),
+        "latest_max_age_minutes": max(1, int(os.getenv("ROUTING_SCORE_LATEST_MAX_AGE_MINUTES", "5"))),
+        "previous_max_age_minutes": max(1, int(os.getenv("ROUTING_SCORE_PREVIOUS_MAX_AGE_MINUTES", "10"))),
+        "speed_tie_points": max(0.0, float(os.getenv("ROUTING_SCORE_SPEED_TIE_POINTS", "5"))),
+    }
+
+
+def auto_toggle_config(state: dict[str, Any] | None = None) -> dict[str, Any]:
+    saved = ((state or load_state()).get("_auto_toggle") or {})
+    threshold = saved.get("fail_threshold", os.getenv("AUTO_TOGGLE_FAIL_THRESHOLD", "3"))
+    return {
+        "enabled": bool(saved["enabled"]) if "enabled" in saved else _env_bool("AUTO_TOGGLE_ENABLED", True),
+        "fail_threshold": max(1, int(threshold)),
+    }
+
+
+def load_action_log() -> list[dict[str, Any]]:
+    try:
+        payload = json.loads(LOG_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return payload if isinstance(payload, list) else []
+
+
+def append_action_log(entries: list[dict[str, Any]]) -> None:
+    if not entries:
+        return
+    now = datetime.now().astimezone().isoformat()
+    with STATE_WRITE_LOCK:
+        rows = load_action_log()
+        for entry in entries:
+            row = {"at": now, **entry}
+            rows.append(row)
+        LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        temporary = LOG_PATH.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(rows[-MAX_ACTION_LOG:], ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        temporary.replace(LOG_PATH)
+
+
+def _routing_metrics(saved: dict[str, Any], now: datetime, config: dict[str, Any]) -> dict[str, Any]:
+    parsed_samples = []
+    for item in saved.get("history", []):
+        try:
+            parsed_samples.append((datetime.fromisoformat(item["at"]), item))
+        except (KeyError, TypeError, ValueError):
+            continue
+    parsed_samples.sort(key=lambda entry: entry[0], reverse=True)
+    latest = parsed_samples[: config["min_samples"]]
+    samples = [item for _, item in latest]
+    latest_at = latest[0][0] if latest else None
+    previous_at = latest[1][0] if len(latest) > 1 else None
+    latest_fresh = bool(latest_at and latest_at >= now - timedelta(minutes=config["latest_max_age_minutes"]))
+    previous_fresh = bool(previous_at and previous_at >= now - timedelta(minutes=config["previous_max_age_minutes"]))
+    successful = [sample for sample in samples if sample.get("ok")]
+    latencies = [float(sample.get("latency_ms") or 0) for sample in successful if float(sample.get("latency_ms") or 0) > 0]
+    stability_window = [item for _, item in parsed_samples[: config["stability_samples"]]]
+    ticks = [sample_tick(sample) for sample in stability_window]
+    green_count = sum(1 for tick in ticks if tick == "ok")
+    yellow_count = sum(1 for tick in ticks if tick == "degraded")
+    red_count = sum(1 for tick in ticks if tick == "bad")
+    stability = round((green_count + yellow_count * 0.5) * 100 / len(stability_window), 1) if stability_window else 0.0
+    return {
+        "sample_count": len(samples),
+        "success_count": len(successful),
+        "availability": round(len(successful) * 100 / len(samples), 1) if samples else None,
+        "average_latency_ms": round(sum(latencies) / len(latencies), 1) if latencies else None,
+        "stability": stability,
+        "stability_sample_count": len(stability_window),
+        "green_count": green_count,
+        "yellow_count": yellow_count,
+        "red_count": red_count,
+        "latest_sample_at": latest_at.isoformat() if latest_at else None,
+        "previous_sample_at": previous_at.isoformat() if previous_at else None,
+        "latest_fresh": latest_fresh,
+        "previous_fresh": previous_fresh,
+        "eligible": len(samples) >= config["min_samples"] and latest_fresh and previous_fresh,
+    }
+
+
+def calculate_routing_scores(now: datetime | None = None) -> list[dict[str, Any]]:
+    """Score monitored, routable channels from the existing rolling history."""
+    config = routing_score_config()
+    now = now or datetime.now().astimezone()
+    candidates = {}
+    for channel in list_channels():
+        if not (channel["channel_enabled"] and channel["monitor_enabled"] and channel["category_enabled"]):
+            continue
+        candidates[int(channel["id"])] = channel
+    if not candidates:
+        return []
+
+    con = db_connect()
+    try:
+        rows = con.execute(
+            'SELECT DISTINCT a."group", a.channel_id, c.name, c.priority '
+            'FROM abilities a JOIN channels c ON c.id=a.channel_id '
+            'WHERE a.enabled=1 AND c.status=1'
+        ).fetchall()
+    finally:
+        con.close()
+
+    by_group = {}
+    for group, channel_id, name, priority in rows:
+        channel_id = int(channel_id)
+        if channel_id not in candidates or group not in ROUTING_PRIORITY_RANGES:
+            continue
+        entry = {
+            "group": str(group), "channel_id": channel_id, "channel_name": str(name or channel_id),
+            "current_priority": int(priority or 0), **_routing_metrics(candidates[channel_id], now, config),
+        }
+        by_group.setdefault(str(group), []).append(entry)
+
+    result = []
+    for group, entries in by_group.items():
+        eligible = [entry for entry in entries if entry["eligible"]]
+        successful = [entry for entry in eligible if entry["average_latency_ms"] is not None]
+        fastest = min((entry["average_latency_ms"] for entry in successful), default=None)
+        for entry in entries:
+            if not entry["eligible"]:
+                if entry["sample_count"] < config["min_samples"]:
+                    reason = f"样本不足（{entry['sample_count']}/{config['min_samples']}）"
+                elif not entry["latest_fresh"]:
+                    reason = f"最新样本超过{config['latest_max_age_minutes']}分钟有效期"
+                else:
+                    reason = f"第二条样本超过{config['previous_max_age_minutes']}分钟有效期"
+                entry.update(score=None, target_priority=None, reason=reason)
+                continue
+            latency = entry["average_latency_ms"]
+            latency_score = 0.0 if not fastest or not latency else min(100.0, fastest * 100 / latency)
+            entry["speed_score"] = round(latency_score, 1)
+            entry["composite_score"] = round(latency_score * .7 + entry["stability"] * .3, 1)
+            entry["score"] = round(float(entry["availability"] or 0) * .6 + entry["composite_score"] * .4, 1)
+        # Availability and speed from last 2; stability from last 5 green/yellow/red ticks.
+        def compare(left: dict[str, Any], right: dict[str, Any]) -> int:
+            if left["score"] != right["score"]:
+                return -1 if left["score"] > right["score"] else 1
+            if left["availability"] != right["availability"]:
+                return -1 if left["availability"] > right["availability"] else 1
+            if abs(left["speed_score"] - right["speed_score"]) > config["speed_tie_points"]:
+                return -1 if left["speed_score"] > right["speed_score"] else 1
+            if left["stability"] != right["stability"]:
+                return -1 if left["stability"] > right["stability"] else 1
+            if left["current_priority"] != right["current_priority"]:
+                return -1 if left["current_priority"] > right["current_priority"] else 1
+            return -1 if left["channel_id"] < right["channel_id"] else (1 if left["channel_id"] > right["channel_id"] else 0)
+
+        ranked = sorted(eligible, key=cmp_to_key(compare))
+        low, high = ROUTING_PRIORITY_RANGES[group]
+        degraded = ranked and max(entry["availability"] or 0 for entry in ranked) < 50
+        for rank, entry in enumerate(ranked, start=1):
+            entry["target_priority"] = low if degraded else max(low, high - rank + 1)
+            entry["rank"] = rank
+            entry["reason"] = "成功率/速度用最近2条，稳定性用最近5条色块：可用性60% + 相对延迟30% + 稳定性10%"
+            if degraded:
+                entry["reason"] += "；号池整体异常，统一压低"
+        result.extend(entries)
+
+    by_channel = {}
+    for entry in result:
+        if entry.get("target_priority") is not None:
+            by_channel.setdefault(entry["channel_id"], set()).add(entry["target_priority"])
+    for entry in result:
+        if len(by_channel.get(entry["channel_id"], set())) > 1:
+            entry.update(target_priority=None, conflict=True, reason="跨分组目标冲突，跳过自动写入")
+    return result
+
+
+def apply_routing_scores() -> dict[str, Any]:
+    config = routing_score_config()
+    scores = calculate_routing_scores()
+    by_id = {}
+    for entry in scores:
+        by_id.setdefault(entry["channel_id"], entry)
+    targets = {entry["channel_id"]: entry["target_priority"] for entry in scores if entry.get("target_priority") is not None}
+    updates = [(channel_id, target) for channel_id, target in targets.items() if by_id[channel_id]["current_priority"] != target]
+    if not config["allow_write"]:
+        return {"ok": False, "applied": False, "updated": 0, "scores": scores, "changes": []}
+    changes = []
+    con = db_connect(False)
+    try:
+        for channel_id, target in updates:
+            current = int(by_id[channel_id]["current_priority"])
+            con.execute("UPDATE channels SET priority=? WHERE id=?", (target, channel_id))
+            con.execute("UPDATE abilities SET priority=? WHERE channel_id=? AND enabled=1", (target, channel_id))
+            changes.append({
+                "kind": "priority",
+                "channel_id": channel_id,
+                "channel_name": by_id[channel_id].get("channel_name"),
+                "group": by_id[channel_id].get("group"),
+                "from_priority": current,
+                "to_priority": target,
+                "score": by_id[channel_id].get("score"),
+                "reason": by_id[channel_id].get("reason"),
+            })
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+    append_action_log(changes)
+    return {"ok": True, "applied": True, "updated": len(updates), "scores": scores, "changes": changes}
+
+
+def set_channel_enabled(channel_id: int, enabled: bool) -> bool:
+    """Keep the channel switch and model abilities in sync atomically."""
+    con = db_connect(False)
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        status = 1 if enabled else 2
+        ability_enabled = 1 if enabled else 0
+        cur = con.execute("UPDATE channels SET status=? WHERE id=?", (status, channel_id))
+        if cur.rowcount != 1:
+            con.rollback()
+            return False
+        con.execute(
+            "UPDATE abilities SET enabled=? WHERE channel_id=?",
+            (ability_enabled, channel_id),
+        )
+        con.commit()
+        return True
+    except Exception:
+        con.rollback()
+        raise
+    finally:
+        con.close()
+
+
+def pool_lowest_priority(channel_id: int, fallback_group: str | None = None) -> int | None:
+    """Return the lowest slot of this channel's routing pool, or None if it is not in a scored pool."""
+    con = db_connect()
+    try:
+        rows = con.execute(
+            'SELECT DISTINCT a."group" FROM abilities a WHERE a.channel_id=? AND a.enabled=1',
+            (channel_id,),
+        ).fetchall()
+    finally:
+        con.close()
+    lows: set[int] = set()
+    for (group,) in rows:
+        if group in ROUTING_PRIORITY_RANGES:
+            lows.add(ROUTING_PRIORITY_RANGES[group][0])
+    if not lows and fallback_group in ROUTING_PRIORITY_RANGES:
+        lows.add(ROUTING_PRIORITY_RANGES[fallback_group][0])
+    if len(lows) == 1:
+        return next(iter(lows))
+    return None
+
+
+def set_channel_priority(channel_id: int, priority: int) -> int | None:
+    con = db_connect(False)
+    try:
+        row = con.execute("SELECT priority FROM channels WHERE id=?", (channel_id,)).fetchone()
+        if not row:
+            return None
+        current = int(row[0] or 0)
+        con.execute("UPDATE channels SET priority=? WHERE id=?", (priority, channel_id))
+        con.execute("UPDATE abilities SET priority=? WHERE channel_id=? AND enabled=1", (priority, channel_id))
+        con.commit()
+        return current
+    finally:
+        con.close()
+
+
+def drop_disabled_channel_to_pool_floor(
+    channel_id: int,
+    fallback_group: str | None = None,
+    channel_name: str | None = None,
+    reason: str = "渠道已禁用，优先级调到分组最低",
+) -> dict[str, Any] | None:
+    """If a scored-pool channel is disabled above its floor, drop it to the floor."""
+    con = db_connect()
+    try:
+        row = con.execute(
+            'SELECT name, status, priority, "group" FROM channels WHERE id=?',
+            (channel_id,),
+        ).fetchone()
+    finally:
+        con.close()
+    if not row:
+        return None
+    name, status, current_priority, group = row
+    if int(status or 0) == 1:
+        return None
+    lowest = pool_lowest_priority(channel_id, fallback_group or group)
+    if lowest is None:
+        return None
+    current_priority = int(current_priority or 0)
+    if current_priority <= lowest:
+        return None
+    previous = set_channel_priority(channel_id, lowest)
+    if previous is None:
+        return None
+    action = {
+        "kind": "priority",
+        "channel_id": channel_id,
+        "channel_name": channel_name or name,
+        "group": fallback_group or group,
+        "from_priority": previous,
+        "to_priority": lowest,
+        "reason": reason,
+    }
+    append_action_log([action])
+    return action
+
+
+def drop_disabled_scored_channels_to_floor() -> list[dict[str, Any]]:
+    """Read New API channel status directly and drop disabled scored-pool channels to their floor."""
+    con = db_connect()
+    try:
+        rows = con.execute(
+            'SELECT c.id, c.name, c.status, c.priority, c."group", '
+            'GROUP_CONCAT(DISTINCT a."group") '
+            'FROM channels c LEFT JOIN abilities a ON a.channel_id=c.id AND a.enabled=1 '
+            'GROUP BY c.id'
+        ).fetchall()
+    finally:
+        con.close()
+    dropped: list[dict[str, Any]] = []
+    for channel_id, name, status, priority, group, agroups in rows:
+        if int(status or 0) == 1:
+            continue
+        groups = [g for g in str(agroups or group or "").split(",") if g]
+        lows = {ROUTING_PRIORITY_RANGES[g][0] for g in groups if g in ROUTING_PRIORITY_RANGES}
+        if len(lows) != 1:
+            continue
+        lowest = next(iter(lows))
+        if int(priority or 0) <= lowest:
+            continue
+        action = drop_disabled_channel_to_pool_floor(
+            int(channel_id),
+            fallback_group=group,
+            channel_name=name,
+            reason="New API 渠道已禁用，优先级调到分组最低",
+        )
+        if action:
+            dropped.append(action)
+    return dropped
+
+
+def scored_pool_names(channel_id: int, fallback_group: str | None = None) -> list[str]:
+    con = db_connect()
+    try:
+        rows = con.execute(
+            'SELECT DISTINCT a."group" FROM abilities a WHERE a.channel_id=? AND a.enabled=1',
+            (channel_id,),
+        ).fetchall()
+    finally:
+        con.close()
+    groups = [group for (group,) in rows if group in ROUTING_PRIORITY_RANGES]
+    if not groups and fallback_group in ROUTING_PRIORITY_RANGES:
+        groups = [fallback_group]
+    return groups
+
+
+def enabled_channel_count_in_pool(group: str) -> int:
+    con = db_connect()
+    try:
+        row = con.execute(
+            'SELECT COUNT(DISTINCT c.id) FROM channels c '
+            'JOIN abilities a ON a.channel_id=c.id AND a.enabled=1 '
+            'WHERE c.status=1 AND a."group"=?',
+            (group,),
+        ).fetchone()
+    finally:
+        con.close()
+    return int(row[0] if row else 0)
+
+
+def is_last_enabled_in_any_scored_pool(channel_id: int, fallback_group: str | None = None) -> bool:
+    """True if closing this channel would empty any of its routing pools."""
+    for group in scored_pool_names(channel_id, fallback_group):
+        if enabled_channel_count_in_pool(group) <= 1:
+            return True
+    return False
+
+
+def apply_auto_toggle(channel: dict[str, Any], result: dict[str, Any]) -> dict[str, Any] | None:
+    """Enable/disable the New API channel from monitor results. Monitoring itself never stops."""
+    config = auto_toggle_config()
+    if not config["enabled"]:
+        return None
+    if channel.get("auto_toggle_exempt"):
+        return None
+    channel_id = int(channel["id"])
+    currently_enabled = bool(channel.get("channel_enabled"))
+    failures = int(result.get("consecutive_failures") or 0)
+    last_ok = bool(result.get("last_ok"))
+    action = None
+    if currently_enabled and failures >= config["fail_threshold"]:
+        if is_last_enabled_in_any_scored_pool(channel_id, channel.get("group")):
+            return None
+        if set_channel_enabled(channel_id, False):
+            dropped = drop_disabled_channel_to_pool_floor(
+                channel_id,
+                fallback_group=channel.get("group"),
+                channel_name=channel.get("name"),
+                reason=f"连续失败 {failures} 次，关闭 New API 渠道，优先级调到分组最低",
+            )
+            lowest = None if dropped is None else dropped.get("to_priority")
+            action = {
+                "kind": "disable",
+                "channel_id": channel_id,
+                "channel_name": channel.get("name"),
+                "group": channel.get("group"),
+                "from_enabled": True,
+                "to_enabled": False,
+                "consecutive_failures": failures,
+                "from_priority": None if dropped is None else dropped.get("from_priority"),
+                "to_priority": lowest,
+                "reason": (
+                    f"连续失败 {failures} 次，关闭 New API 渠道"
+                    + (f"，优先级调到分组最低 {lowest}" if lowest is not None else "")
+                ),
+            }
+    elif (not currently_enabled) and last_ok:
+        if set_channel_enabled(channel_id, True):
+            action = {
+                "kind": "enable",
+                "channel_id": channel_id,
+                "channel_name": channel.get("name"),
+                "group": channel.get("group"),
+                "from_enabled": False,
+                "to_enabled": True,
+                "consecutive_failures": 0,
+                "reason": "检测到可用，打开 New API 渠道",
+            }
+    if action:
+        append_action_log([action])
+    return action
+
+
+@router.get("/routing-score")
+def routing_score() -> dict[str, Any]:
+    return {"ok": True, "config": routing_score_config(), "scores": calculate_routing_scores()}
+
+
+@router.get("/priority-log")
+def priority_log(limit: int = Query(default=200, ge=1, le=1000)) -> dict[str, Any]:
+    rows = load_action_log()
+    return {
+        "ok": True,
+        "config": {**routing_score_config(), "auto_toggle": auto_toggle_config()},
+        "logs": list(reversed(rows[-limit:])),
+        "total": len(rows),
+    }
+
+
+@router.post("/auto-toggle")
+def save_auto_toggle(payload: dict[str, Any], x_channel_monitor_token: str | None = Header(default=None), authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    check_token(token_value(x_channel_monitor_token, authorization))
+    state = load_state()
+    item = state.setdefault("_auto_toggle", {})
+    if "enabled" in payload:
+        item["enabled"] = bool(payload.get("enabled"))
+    if "fail_threshold" in payload and payload.get("fail_threshold") not in (None, ""):
+        item["fail_threshold"] = max(1, int(payload.get("fail_threshold") or 3))
+    write_state(state)
+    return {"ok": True, **auto_toggle_config(state)}
+
+
+@router.post("/channels/{channel_id}/auto-toggle-exempt")
+def save_auto_toggle_exempt(channel_id: int, payload: dict[str, Any], x_channel_monitor_token: str | None = Header(default=None), authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    check_token(token_value(x_channel_monitor_token, authorization))
+    exempt = bool(payload.get("exempt"))
+    save_monitor_settings(channel_id, auto_toggle_exempt=exempt)
+    return {"ok": True, "id": channel_id, "exempt": exempt}
 
 
 def get_monitor_global_enabled(state: dict[str, Any] | None = None) -> bool:
@@ -254,13 +776,20 @@ def fetch_upstream_models(channel_id: int) -> list[str]:
     return [str(x.get("id")) for x in data.get("data", []) if isinstance(x, dict) and x.get("id")]
 
 
-def save_monitor_settings(channel_id: int, enabled: bool | None = None, model: str | None = None) -> None:
+def save_monitor_settings(
+    channel_id: int,
+    enabled: bool | None = None,
+    model: str | None = None,
+    auto_toggle_exempt: bool | None = None,
+) -> None:
     state = load_state()
     item = state.setdefault(str(channel_id), {})
     if enabled is not None:
         item["monitor_enabled"] = bool(enabled)
     if model is not None:
         item["monitor_model"] = str(model).strip()
+    if auto_toggle_exempt is not None:
+        item["auto_toggle_exempt"] = bool(auto_toggle_exempt)
     write_state(state)
 
 
@@ -285,8 +814,8 @@ def list_channels() -> list[dict[str, Any]]:
         con.close()
     state = load_state()
     now = datetime.now().astimezone()
-    combination_order = get_combination_order()
     result = []
+    combination_order = get_combination_order()
     for row in rows:
         item = channel_row(row)
         saved = state.get(str(item["id"]), {})
@@ -302,18 +831,20 @@ def list_channels() -> list[dict[str, Any]]:
         )
         item["monitor_model_saved"] = bool(saved_model)
         item["monitor_global_enabled"] = get_monitor_global_enabled(state)
+        item["auto_toggle_exempt"] = bool(saved.get("auto_toggle_exempt", False))
         item["category"] = classify_channel(item)
         item["category_enabled"] = get_category_enabled(item["category"], state)
-        item["combination_key"] = classify_combination(item)
+        item["combination"] = classify_combination(item)
         item["combination_rank"] = channel_combination_rank(item, combination_order)
-        item.update(_safe_owner_metadata(int(item["id"])))
+        item.update(_owner_metadata(int(item["id"])))
         result.append(item)
-    return sorted(result, key=lambda x: (
+    result.sort(key=lambda x: (
         int(x.get("combination_rank", len(combination_order) + 1)),
         -int(x.get("priority") or 0),
-        str(x.get("name") or "").casefold(),
+        str(x.get("name") or ""),
         int(x.get("id") or 0),
     ))
+    return result
 
 
 def run_check(channel: dict[str, Any]) -> dict[str, Any]:
@@ -366,7 +897,7 @@ def run_check(channel: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def persist_check(channel_id: int, result: dict[str, Any]) -> None:
+def persist_check(channel_id: int, result: dict[str, Any], channel: dict[str, Any] | None = None) -> dict[str, Any] | None:
     state = load_state()
     old = state.get(str(channel_id), {})
     history = old.get("history", [])
@@ -379,6 +910,9 @@ def persist_check(channel_id: int, result: dict[str, Any]) -> None:
     result["availability_7d"] = availability(history)
     state[str(channel_id)] = {**old, **result}
     write_state(state)
+    source = channel or old
+    source = {**source, "id": channel_id, "channel_enabled": source.get("channel_enabled", source.get("status") == 1)}
+    return apply_auto_toggle(source, result)
 
 
 def check_token(_provided: str | None = None) -> None:
@@ -403,16 +937,6 @@ def channels(x_channel_monitor_token: str | None = Header(default=None), authori
     return {"ok": True, "channels": list_channels()}
 
 
-@router.get("/owners")
-def owners(x_channel_monitor_token: str | None = Header(default=None), authorization: str | None = Header(default=None)) -> dict[str, Any]:
-    check_token(token_value(x_channel_monitor_token, authorization))
-    try:
-        from routes import _account_names
-        return {"ok": True, "owners": [{"id": key, "name": name} for key, name in _account_names().items()]}
-    except Exception:
-        return {"ok": True, "owners": []}
-
-
 @router.get("/test/{channel_id}")
 def test_channel(channel_id: int, x_channel_monitor_token: str | None = Header(default=None), authorization: str | None = Header(default=None)) -> dict[str, Any]:
     check_token(token_value(x_channel_monitor_token, authorization))
@@ -420,7 +944,7 @@ def test_channel(channel_id: int, x_channel_monitor_token: str | None = Header(d
     if not channel:
         raise HTTPException(status_code=404, detail="渠道不存在")
     result = run_check(channel)
-    persist_check(channel_id, result)
+    persist_check(channel_id, result, channel)
     return {"ok": result["last_ok"], **result}
 
 
@@ -456,38 +980,22 @@ async def monitor_model(channel_id: int, payload: dict[str, Any], x_channel_moni
     return {"ok": True, "model": model}
 
 
-@router.put("/channels/{channel_id}/owner")
-def set_channel_owner(channel_id: int, payload: dict[str, Any], x_channel_monitor_token: str | None = Header(default=None), authorization: str | None = Header(default=None)) -> dict[str, Any]:
-    check_token(token_value(x_channel_monitor_token, authorization))
-    from routes import clear_channel_ownership, set_channel_ownership
-    owner = payload.get("owner_account_id")
-    if owner in (None, ""):
-        clear_channel_ownership(channel_id)
-        return {"ok": True, "owner_account_id": None}
-    return {"ok": True, **set_channel_ownership(channel_id, str(owner), "manual")}
-
-
-@router.delete("/channels/{channel_id}/owner")
-def clear_channel_owner(channel_id: int, x_channel_monitor_token: str | None = Header(default=None), authorization: str | None = Header(default=None)) -> dict[str, Any]:
-    check_token(token_value(x_channel_monitor_token, authorization))
-    from routes import clear_channel_ownership
-    clear_channel_ownership(channel_id)
-    return {"ok": True, "owner_account_id": None}
+def toggle_channel_enabled(channel_id: int, enabled: bool) -> dict[str, Any]:
+    if not set_channel_enabled(channel_id, enabled):
+        raise HTTPException(status_code=404, detail="渠道不存在")
+    dropped = None
+    if not enabled:
+        dropped = drop_disabled_channel_to_pool_floor(
+            channel_id,
+            reason="手动禁用，优先级调到分组最低",
+        )
+    return {"ok": True, "id": channel_id, "enabled": enabled, "priority_dropped": dropped}
 
 
 @router.post("/channels/{channel_id}/toggle")
 def production_toggle(channel_id: int, payload: dict[str, Any], x_channel_monitor_token: str | None = Header(default=None), authorization: str | None = Header(default=None)) -> dict[str, Any]:
     check_token(token_value(x_channel_monitor_token, authorization))
-    enabled = bool(payload.get("enabled"))
-    con = db_connect(False)
-    try:
-        cur = con.execute("UPDATE channels SET status=? WHERE id=?", (1 if enabled else 2, channel_id))
-        if cur.rowcount != 1:
-            raise HTTPException(status_code=404, detail="渠道不存在")
-        con.commit()
-    finally:
-        con.close()
-    return {"ok": True, "id": channel_id, "enabled": enabled}
+    return toggle_channel_enabled(channel_id, bool(payload.get("enabled")))
 
 
 @router.post("/channels")
@@ -498,11 +1006,6 @@ def add_channel(payload: dict[str, Any], x_channel_monitor_token: str | None = H
     key = str(payload.get("key", "")).strip()
     if not name or not base or not key or not base.startswith(("http://", "https://")):
         raise HTTPException(status_code=400, detail="名称、上游地址和 Key 必填")
-    owner_id = str(payload.get("owner_account_id") or "").strip()
-    if owner_id:
-        from routes import _account_names
-        if owner_id not in _account_names():
-            raise HTTPException(status_code=400, detail="归属账号不存在")
     models = ",".join(str(payload.get("models", "")).split(","))
     con = db_connect(False)
     try:
@@ -511,52 +1014,9 @@ def add_channel(payload: dict[str, Any], x_channel_monitor_token: str | None = H
             (1, key, name, 1, 1, base, models, str(payload.get("group", "default")), int(payload.get("priority", 0)), 1, str(payload.get("test_model", ""))),
         )
         con.commit()
-        if owner_id:
-            from routes import set_channel_ownership
-            set_channel_ownership(cur.lastrowid, owner_id, "manual")
         return {"ok": True, "id": cur.lastrowid}
     finally:
         con.close()
-
-
-@router.patch("/channels/{channel_id}")
-def edit_channel(channel_id: int, payload: dict[str, Any], x_channel_monitor_token: str | None = Header(default=None), authorization: str | None = Header(default=None)) -> dict[str, Any]:
-    check_token(token_value(x_channel_monitor_token, authorization))
-    allowed = {"name": "name", "base_url": "base_url", "models": "models", "group": '"group"', "priority": "priority", "test_model": "test_model"}
-    updates, values = [], []
-    for key, column in allowed.items():
-        if key not in payload:
-            continue
-        value = payload[key]
-        if key == "models":
-            value = ",".join(str(value).split(","))
-        if key == "priority":
-            try:
-                value = int(value)
-            except (TypeError, ValueError):
-                raise HTTPException(status_code=400, detail="priority 必须是整数")
-        updates.append(f"{column}=?")
-        values.append(value)
-    con = db_connect(False)
-    try:
-        if updates:
-            values.append(channel_id)
-            cur = con.execute(f"UPDATE channels SET {','.join(updates)} WHERE id=?", values)
-            if cur.rowcount != 1:
-                raise HTTPException(status_code=404, detail="渠道不存在")
-            con.commit()
-        elif not con.execute("SELECT 1 FROM channels WHERE id=?", (channel_id,)).fetchone():
-            raise HTTPException(status_code=404, detail="渠道不存在")
-    finally:
-        con.close()
-    if "owner_account_id" in payload:
-        from routes import clear_channel_ownership, set_channel_ownership
-        owner = payload.get("owner_account_id")
-        if owner in (None, ""):
-            clear_channel_ownership(channel_id)
-        else:
-            set_channel_ownership(channel_id, str(owner), "manual")
-    return {"ok": True, "id": channel_id}
 
 
 async def monitor_loop(stop_event: asyncio.Event) -> None:
@@ -566,9 +1026,19 @@ async def monitor_loop(stop_event: asyncio.Event) -> None:
                 for channel in list_channels():
                     if channel["monitor_enabled"] and channel["category_enabled"]:
                         result = await asyncio.to_thread(run_check, channel)
-                        persist_check(channel["id"], result)
+                        persist_check(channel["id"], result, channel)
+                config = routing_score_config()
+                if config["enabled"] and config["auto_apply"]:
+                    applied = apply_routing_scores()
+                    print(f"[routing-score] updated={applied['updated']}")
         except Exception:
             # One bad upstream must not stop the merged Hub monitor.
+            pass
+        try:
+            dropped = drop_disabled_scored_channels_to_floor()
+            if dropped:
+                print(f"[routing-score] disabled-floor={len(dropped)}")
+        except Exception:
             pass
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=60)

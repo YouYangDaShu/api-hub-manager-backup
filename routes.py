@@ -1,11 +1,15 @@
 """后端 API 路由"""
 import asyncio
 import json
+import math
 import os
+import smtplib
 import sqlite3
+import ssl
 import time
 import uuid
 from datetime import date, datetime, timedelta
+from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +19,8 @@ from services.newapi import NewAPIAdapter
 from services.sub2api import Sub2APIAdapter
 from services import capsolver, new_async_client
 from channel_monitor import (
-    COMBINATION_OPTIONS,
+    combination_options,
+    list_channel_group_names,
     normalize_combination_order,
     validate_combination_order,
 )
@@ -49,6 +54,12 @@ class RedeemRequest(BaseModel):
     code: str
 
 
+class SelfPoolCostCreate(BaseModel):
+    amount: float
+    cost_date: date
+    note: str = ""
+
+
 class SettingsUpdate(BaseModel):
     capsolver_api_key: str | None = None
     hub_base_url: str | None = None
@@ -62,8 +73,19 @@ class SettingsUpdate(BaseModel):
     show_today_dataset: bool | None = None
     show_total_dataset: bool | None = None
     mask_channel_urls: bool | None = None
+    mask_channel_names: bool | None = None
     group_filter_keyword: str | None = None
     channel_combination_order: list[str] | None = None
+    smtp_alert_enabled: bool | None = None
+    smtp_alert_threshold: float | None = None
+    smtp_alert_recipients: str | None = None
+    smtp_alert_cooldown_hours: float | None = None
+    smtp_alert_max_repeats: int | None = None
+
+
+class DashboardAutoRefreshUpdate(BaseModel):
+    enabled: bool
+    interval: int = 300
 
 
 # === 数据持久化 ===
@@ -101,19 +123,83 @@ USAGE_LEDGER_FILE = DATA_DIR / "usage_ledger.json"
 SITE_BILLING_DB = Path(os.environ.get("NEWAPI_DB", "/home/youyang/projects/services/new-api/data/one-api.db"))
 SITE_REVENUE_ADJUSTMENTS = DATA_DIR / "site_revenue_adjustments.json"
 CHANNEL_OWNERSHIP_FILE = Path(os.environ.get("CHANNEL_OWNERSHIP_FILE", str(DATA_DIR / "channel_ownership.json")))
+SELF_POOL_ACCOUNT_ID = "self-pool"
+SELF_POOL_ACCOUNT_NAME = "自建号池"
+SELF_POOL_COST_FILE = DATA_DIR / "self_pool_costs.json"
+
+
+def _load_self_pool_costs() -> list[dict[str, Any]]:
+    if not SELF_POOL_COST_FILE.exists():
+        return []
+    try:
+        rows = json.loads(SELF_POOL_COST_FILE.read_text(encoding="utf-8"))
+        return rows if isinstance(rows, list) else []
+    except (json.JSONDecodeError, OSError, TypeError):
+        return []
+
+
+def _save_self_pool_costs(rows: list[dict[str, Any]]) -> None:
+    temporary = SELF_POOL_COST_FILE.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(SELF_POOL_COST_FILE)
+
+
+def _self_pool_cost_totals(today: date | None = None) -> dict[str, float]:
+    current = today or datetime.now().astimezone().date()
+    yesterday = current - timedelta(days=1)
+    recent_start = current - timedelta(days=6)
+    totals = {"today_cost": 0.0, "yesterday_cost": 0.0, "recent_cost": 0.0, "total_cost": 0.0}
+    for row in _load_self_pool_costs():
+        try:
+            amount = float(row.get("amount", 0))
+            row_date = date.fromisoformat(str(row.get("cost_date", "")))
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(amount) or amount <= 0:
+            continue
+        totals["total_cost"] += amount
+        if row_date == current:
+            totals["today_cost"] += amount
+        if row_date == yesterday:
+            totals["yesterday_cost"] += amount
+        if recent_start <= row_date <= current:
+            totals["recent_cost"] += amount
+    return {key: round(value, 4) for key, value in totals.items()}
+
+
 # 生产 New API 中已核对过归属的多渠道账号。只保存 channel_id，不保存任何 API key。
-SITE_CHANNEL_IDS_BY_ACCOUNT = {
-    "926d2a81": (63, 64, 73),       # 莫比乌斯（2chat 同一登录账号，含 chat2api）
-    "f6506b67": (89, 97, 103),      # 板栗（banliapi.top 同一登录账号）
-    "2734859e": (95, 102, 104),     # coco（sub-coco.org，含 coco 自建/PRO）
-    "bb065c1c": (79,),               # 凉介（dreamaitoken.cloud，含 plus 稳定）
-    "7d5b654c": (46, 98, 107),          # DC（GPT + AWS-Claude-High + AWS-Claude；107 为旧 GPT 渠道重建后的新 ID）
-    "d8d50eee": (87, 106),          # SY（mxamaxai.com，含 sy 小铺 PRO）
-    "b0d14b19": (56,),          # 汇流副号（304...）
-    "ebd3907b": (29,),               # 词元（mathmodel pro）
-    "100de40f": (92,),               # 蛋炒饭（proxygpt.cc.cd）
-    "2212f6bb": (101,),              # Jay（同一公网站）
-    "6d0226c3": (71,),          # 汇流主号（197...，多 Key 渠道）
+def _load_channel_mapping():
+    """从外部文件加载渠道 ID 映射配置（如果存在）"""
+    mapping_file = DATA_DIR / "channel_mapping.json"
+    if mapping_file.exists():
+        try:
+            data = json.loads(mapping_file.read_text(encoding="utf-8"))
+            # 转换为 tuple 格式以保持兼容性
+            return {k: tuple(v) if isinstance(v, list) else v for k, v in data.items()}
+        except Exception as e:
+            print(f"⚠️  加载 channel_mapping.json 失败: {e}")
+    # 默认配置（保持向后兼容）
+    return {
+        "926d2a81": (63, 64, 73),       # 莫比乌斯（2chat 同一登录账号，含 chat2api）
+        "f6506b67": (89, 97, 103),      # 板栗（banliapi.top 同一登录账号）
+        "2734859e": (95, 102, 104),     # coco（sub-coco.org，含 coco 自建/PRO）
+        "bb065c1c": (79,),               # 凉介（dreamaitoken.cloud，含 plus 稳定）
+        "7d5b654c": (46, 98, 107),          # DC（GPT + AWS-Claude-High + AWS-Claude；107 为旧 GPT 渠道重建后的新 ID）
+        "d8d50eee": (87, 106),          # SY（mxamaxai.com，含 sy 小铺 PRO）
+        "b0d14b19": (56,),          # 汇流副号（304...）
+        "ebd3907b": (29,),               # 词元（mathmodel pro）
+        "100de40f": (92,),               # 蛋炒饭（proxygpt.cc.cd）
+        "2212f6bb": (101,),              # Jay（同一公网站）
+        "6d0226c3": (71,),          # 汇流主号（197...，多 Key 渠道）
+    }
+
+SITE_CHANNEL_IDS_BY_ACCOUNT = _load_channel_mapping()
+# 仅指定业务日修正“今日收入”的账号归属，不改原始流水、昨日或累计收入。
+# 2026-08-27 已核对：渠道 71 的当天调用实际消耗汇流副号余额。
+SITE_DAILY_CHANNEL_ATTRIBUTION_OVERRIDES = {
+    "2026-08-27": {
+        71: "b0d14b19",
+    },
 }
 
 CACHE_TTL_DASHBOARD = 300  # 仪表盘缓存 5 分钟
@@ -122,6 +208,225 @@ CACHE_TTL_ACCOUNT = 180    # 单个账号缓存 3 分钟
 # 后台刷新状态：防止并发 force 刷新互相踩踏
 _refresh_lock = asyncio.Lock()
 _refreshing = False
+_dashboard_refresh_last_error = ""
+_dashboard_refresh_last_error_at = 0
+DASHBOARD_REFRESH_INTERVALS = {300, 600, 1800}
+SMTP_ALERT_STATE_FILE = DATA_DIR / "smtp_alert_state.json"
+SMTP_ALERT_DEFAULT_MAX_REPEATS = 3
+SMTP_ALERT_DEFAULT_THRESHOLD = 5.0
+SMTP_ALERT_DEFAULT_COOLDOWN_HOURS = 24.0
+SMTP_ALERT_SEND_TIMEOUT = 20
+_smtp_alert_lock = asyncio.Lock()
+BILLING_REPORT_STATE_FILE = DATA_DIR / "billing_report_state.json"
+BILLING_REPORT_DEFAULT_TIME = "00:05"
+_billing_report_lock = asyncio.Lock()
+
+
+def _load_smtp_alert_state() -> dict[str, dict[str, Any]]:
+    try:
+        value = json.loads(SMTP_ALERT_STATE_FILE.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
+    except (OSError, json.JSONDecodeError, TypeError):
+        return {}
+
+
+def _save_smtp_alert_state(state: dict[str, dict[str, Any]]) -> None:
+    temporary = SMTP_ALERT_STATE_FILE.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(SMTP_ALERT_STATE_FILE)
+
+
+def _smtp_option_values() -> dict[str, str]:
+    """Read SMTP settings from the live New API DB without copying the password."""
+    uri = f"file:{SITE_BILLING_DB}?mode=ro"
+    with sqlite3.connect(uri, uri=True, timeout=5) as conn:
+        rows = conn.execute(
+            "SELECT key, value FROM options WHERE key IN "
+            "('SMTPServer','SMTPAccount','SMTPFrom','SMTPToken','SMTPPort',"
+            "'SMTPStartTLSEnabled','SMTPSSLEnabled','SMTPInsecureSkipVerify','SMTPForceAuthLogin')"
+        ).fetchall()
+    return {str(key): str(value or "") for key, value in rows}
+
+
+def _smtp_bool(value: str) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _parse_recipients(value: str, fallback: str) -> list[str]:
+    raw = value or fallback
+    result = []
+    for item in raw.replace(";", ",").replace("\n", ",").split(","):
+        address = item.strip()
+        if not address or "@" not in address or any(c in address for c in "\r\n"):
+            continue
+        result.append(address)
+    return list(dict.fromkeys(result))
+
+
+def _smtp_config_status() -> dict[str, Any]:
+    try:
+        options = _smtp_option_values()
+    except (OSError, sqlite3.Error) as exc:
+        return {"configured": False, "error": f"无法读取 New API SMTP 配置: {exc}"}
+    host = options.get("SMTPServer", "").strip()
+    account = options.get("SMTPAccount", "").strip()
+    sender = (options.get("SMTPFrom") or account).strip()
+    try:
+        port = int(options.get("SMTPPort") or 0)
+    except ValueError:
+        port = 0
+    configured = bool(host and account and options.get("SMTPToken") and 1 <= port <= 65535 and sender)
+    return {
+        "configured": configured,
+        "server": host,
+        "port": port,
+        "account": account,
+        "sender": sender,
+        "ssl": _smtp_bool(options.get("SMTPSSLEnabled", "")),
+        "starttls": _smtp_bool(options.get("SMTPStartTLSEnabled", "")),
+        "password_set": bool(options.get("SMTPToken")),
+        "error": "" if configured else "New API SMTP 配置不完整",
+    }
+
+
+def _send_smtp_message(subject: str, body: str, recipients: list[str]) -> None:
+    options = _smtp_option_values()
+    host = options.get("SMTPServer", "").strip()
+    account = options.get("SMTPAccount", "").strip()
+    token = options.get("SMTPToken", "")
+    sender = (options.get("SMTPFrom") or account).strip()
+    try:
+        port = int(options.get("SMTPPort") or (465 if _smtp_bool(options.get("SMTPSSLEnabled", "")) else 587))
+    except ValueError as exc:
+        raise RuntimeError("New API SMTP 端口无效") from exc
+    if not host or not account or not token or not sender or not recipients:
+        raise RuntimeError("New API SMTP 配置不完整或未设置收件人")
+
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["From"] = sender
+    message["To"] = ", ".join(recipients)
+    message.set_content(body)
+    context = ssl.create_default_context()
+    if _smtp_bool(options.get("SMTPInsecureSkipVerify", "")):
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+    use_ssl = _smtp_bool(options.get("SMTPSSLEnabled", ""))
+    smtp_cls = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
+    with smtp_cls(host, port, timeout=SMTP_ALERT_SEND_TIMEOUT, context=context) if use_ssl else smtp_cls(host, port, timeout=SMTP_ALERT_SEND_TIMEOUT) as client:
+        client.ehlo()
+        if not use_ssl and _smtp_bool(options.get("SMTPStartTLSEnabled", "")):
+            client.starttls(context=context)
+            client.ehlo()
+        client.login(account, token)
+        client.send_message(message)
+
+
+def _smtp_max_repeats(settings: dict[str, Any]) -> int:
+    """Return a bounded repeat cap; malformed legacy settings fail closed."""
+    raw = settings.get("smtp_alert_max_repeats", SMTP_ALERT_DEFAULT_MAX_REPEATS)
+    if isinstance(raw, bool):
+        return SMTP_ALERT_DEFAULT_MAX_REPEATS
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return SMTP_ALERT_DEFAULT_MAX_REPEATS
+    if value < 1 or value > 100:
+        return SMTP_ALERT_DEFAULT_MAX_REPEATS
+    return value
+
+
+def _recovered_account_ids(accounts: list[dict[str, Any]], threshold: float) -> set[str]:
+    """Return accounts whose balance was positively observed above threshold."""
+    recovered = set()
+    for account in accounts:
+        account_id = str(account.get("id") or "").strip()
+        if account.get("virtual") or account_id == SELF_POOL_ACCOUNT_ID or not account_id:
+            continue
+        try:
+            balance = float(account.get("balance"))
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(balance) and balance > threshold:
+            recovered.add(account_id)
+    return recovered
+
+
+def _low_balance_rows(accounts: list[dict[str, Any]], threshold: float) -> list[dict[str, Any]]:
+    rows = []
+    for account in accounts:
+        account_id = str(account.get("id") or "").strip()
+        if account.get("virtual") or account_id == SELF_POOL_ACCOUNT_ID or not account_id:
+            continue
+        try:
+            balance = float(account.get("balance"))
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(balance) and balance <= threshold:
+            rows.append({
+                "id": account_id,
+                "name": str(account.get("name", "")),
+                "base_url": str(account.get("base_url", "")),
+                "balance": balance,
+            })
+    return rows
+
+
+async def _send_low_balance_alerts(accounts: list[dict[str, Any]]) -> None:
+    async with _smtp_alert_lock:
+        settings = _load_settings()
+        if not settings.get("smtp_alert_enabled", False):
+            return
+        try:
+            threshold = float(settings.get("smtp_alert_threshold", SMTP_ALERT_DEFAULT_THRESHOLD))
+            cooldown_hours = float(settings.get("smtp_alert_cooldown_hours", SMTP_ALERT_DEFAULT_COOLDOWN_HOURS))
+            max_repeats = _smtp_max_repeats(settings)
+        except (TypeError, ValueError):
+            return
+        if not math.isfinite(threshold) or threshold < 0 or not math.isfinite(cooldown_hours) or cooldown_hours < 0:
+            return
+        recipients = _parse_recipients(str(settings.get("smtp_alert_recipients", "")), "")
+        if not recipients:
+            try:
+                recipients = _parse_recipients("", _smtp_option_values().get("SMTPAccount", ""))
+            except (OSError, sqlite3.Error):
+                return
+        low_rows = _low_balance_rows(accounts, threshold)
+        recovered_ids = _recovered_account_ids(accounts, threshold)
+        now = time.time()
+        state = _load_smtp_alert_state()
+        low_ids = {row["id"] for row in low_rows}
+        for account_id, entry in list(state.items()):
+            if account_id in recovered_ids and account_id not in low_ids and isinstance(entry, dict):
+                entry["low"] = False
+                entry["repeat_count"] = 0
+        due = []
+        for row in low_rows:
+            entry = state.setdefault(row["id"], {})
+            last_sent = float(entry.get("last_sent", 0) or 0)
+            repeat_count = int(entry.get("repeat_count", 0) or 0)
+            if repeat_count < max_repeats and (not entry.get("low", False) or now - last_sent >= cooldown_hours * 3600):
+                due.append(row)
+        if not due:
+            _save_smtp_alert_state(state)
+            return
+        lines = [f"New API 渠道余额不足告警（阈值：{threshold:g}）", ""]
+        for row in due:
+            lines.append(f"渠道：{row['name']} | 余额：{row['balance']:g} | 地址：{row['base_url']}")
+        lines.append("")
+        lines.append(f"检查时间：{datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S %z')}")
+        try:
+            await asyncio.wait_for(
+                asyncio.to_thread(_send_smtp_message, "New API 渠道余额不足告警", "\n".join(lines), recipients),
+                timeout=SMTP_ALERT_SEND_TIMEOUT + 5,
+            )
+        except Exception as exc:
+            print(f"SMTP 余额告警发送失败: {exc}")
+            return
+        for row in due:
+            entry = state.setdefault(row["id"], {})
+            entry.update({"low": True, "last_sent": now, "repeat_count": int(entry.get("repeat_count", 0) or 0) + 1})
+        _save_smtp_alert_state(state)
 
 
 def _cache_get(key: str, ttl: int) -> Any | None:
@@ -202,6 +507,8 @@ def _attach_usage_ledger(account_summaries: list[dict[str, Any]]) -> None:
     ledger = _load_usage_ledger()
     changed = False
     for summary in account_summaries:
+        if summary.get("virtual"):
+            continue
         account_id = str(summary.get("id", ""))
         upstream = summary.get("total_cost")
         if not account_id or upstream is None:
@@ -273,6 +580,8 @@ def _attach_usage_history(account_summaries: list[dict[str, Any]]) -> None:
     today_values = history.setdefault(today_key, {})
 
     for summary in account_summaries:
+        if summary.get("virtual"):
+            continue
         account_id = str(summary.get("id", ""))
         current = summary.get("today_cost")
         if account_id and current is not None:
@@ -328,8 +637,13 @@ def _load_revenue_adjustments() -> dict[str, dict[str, Any]]:
         return {}
 
 
+def _site_revenue_now() -> datetime:
+    """可注入的本站财务时间，使用服务器本地业务时区。"""
+    return datetime.now().astimezone()
+
+
 def _load_channel_ownership() -> dict[str, dict[str, Any]]:
-    """Load manual channel ownership without ever persisting credentials."""
+    """Load manual channel ownership without persisting credentials."""
     if not CHANNEL_OWNERSHIP_FILE.exists():
         return {}
     try:
@@ -338,35 +652,30 @@ def _load_channel_ownership() -> dict[str, dict[str, Any]]:
         return {}
     if not isinstance(raw, dict):
         return {}
-    result: dict[str, dict[str, Any]] = {}
+    result = {}
     for channel_id, value in raw.items():
         if not isinstance(value, dict):
             continue
         owner = str(value.get("owner_account_id") or "").strip()
-        if not owner:
-            continue
-        source = str(value.get("source") or "manual")
-        if source not in {"manual", "channel_id", "upstream_key"}:
-            source = "manual"
-        result[str(channel_id)] = {
-            "channel_id": str(channel_id),
-            "owner_account_id": owner,
-            "updated_at": str(value.get("updated_at") or ""),
-            "source": source,
-        }
+        if owner:
+            result[str(channel_id)] = {
+                "channel_id": str(channel_id),
+                "owner_account_id": owner,
+                "updated_at": str(value.get("updated_at") or ""),
+                "source": "manual",
+            }
     return result
 
 
 def _save_channel_ownership(data: dict[str, dict[str, Any]]) -> None:
     CHANNEL_OWNERSHIP_FILE.parent.mkdir(parents=True, exist_ok=True)
     temporary = CHANNEL_OWNERSHIP_FILE.with_suffix(".json.tmp")
-    # Explicit allow-list prevents accidental key/token/password persistence.
     safe = {
         str(channel_id): {
             "channel_id": str(channel_id),
             "owner_account_id": str(value.get("owner_account_id") or ""),
             "updated_at": str(value.get("updated_at") or ""),
-            "source": (str(value.get("source")) if value.get("source") in {"manual", "channel_id", "upstream_key"} else "manual"),
+            "source": "manual",
         }
         for channel_id, value in data.items()
         if isinstance(value, dict) and str(value.get("owner_account_id") or "").strip()
@@ -375,41 +684,52 @@ def _save_channel_ownership(data: dict[str, dict[str, Any]]) -> None:
     temporary.replace(CHANNEL_OWNERSHIP_FILE)
 
 
+def _account_names() -> dict[str, str]:
+    names = {str(a.get("id")): str(a.get("name") or a.get("id")) for a in _load_accounts()}
+    names[SELF_POOL_ACCOUNT_ID] = SELF_POOL_ACCOUNT_NAME
+    return names
+
+
+def _self_pool_summary() -> dict[str, Any]:
+    """自建渠道的虚拟账本桶：收入来自本站流水，成本来自手工录入。"""
+    summary = {
+        "id": SELF_POOL_ACCOUNT_ID,
+        "name": SELF_POOL_ACCOUNT_NAME,
+        "platform": "self-pool",
+        "base_url": "",
+        "recharge_ratio": 1.0,
+        "credential_type": "virtual",
+        "has_upstream_key": False,
+        "balance": None,
+        "today_cost": 0.0,
+        "yesterday_cost": 0.0,
+        "recent_cost": 0.0,
+        "total_cost": 0.0,
+        "groups": [],
+        "virtual": True,
+    }
+    summary.update(_self_pool_cost_totals())
+    return summary
+
+
 def get_channel_ownership(channel_id: int | str) -> dict[str, Any] | None:
-    """Return safe manual ownership metadata for a channel."""
     return _load_channel_ownership().get(str(channel_id))
 
 
-def _account_names() -> dict[str, str]:
-    return {str(a.get("id")): str(a.get("name") or a.get("id")) for a in _load_accounts()}
-
-
-def list_channel_ownership() -> list[dict[str, Any]]:
-    names = _account_names()
-    result = []
-    for item in _load_channel_ownership().values():
-        row = dict(item)
-        row["owner_account_name"] = names.get(str(row["owner_account_id"]), "")
-        row["owner_exists"] = str(row["owner_account_id"]) in names
-        result.append(row)
-    return sorted(result, key=lambda x: (0, int(x["channel_id"])) if str(x["channel_id"]).isdigit() else (1, str(x["channel_id"])))
-
-
-def set_channel_ownership(channel_id: int | str, owner_account_id: str, source: str = "manual") -> dict[str, Any]:
+def set_channel_ownership(channel_id: int | str, owner_account_id: str) -> dict[str, Any]:
     owner_account_id = str(owner_account_id or "").strip()
-    if not owner_account_id or owner_account_id not in _account_names():
+    if owner_account_id not in _account_names():
         raise HTTPException(status_code=400, detail="归属账号不存在")
     try:
         normalized_channel_id = str(int(channel_id))
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="channel_id 必须是整数")
-    source = source if source in {"manual", "channel_id", "upstream_key"} else "manual"
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="channel_id 必须是整数") from exc
     data = _load_channel_ownership()
     data[normalized_channel_id] = {
         "channel_id": normalized_channel_id,
         "owner_account_id": owner_account_id,
         "updated_at": datetime.now().astimezone().isoformat(),
-        "source": source,
+        "source": "manual",
     }
     _save_channel_ownership(data)
     _cache_invalidate("dashboard")
@@ -424,6 +744,17 @@ def clear_channel_ownership(channel_id: int | str) -> bool:
     _save_channel_ownership(data)
     _cache_invalidate("dashboard")
     return existed
+
+
+def list_channel_ownership() -> list[dict[str, Any]]:
+    names = _account_names()
+    result = []
+    for item in _load_channel_ownership().values():
+        row = dict(item)
+        row["owner_account_name"] = names.get(str(row["owner_account_id"]), "")
+        row["owner_exists"] = str(row["owner_account_id"]) in names
+        result.append(row)
+    return sorted(result, key=lambda x: int(x["channel_id"]) if str(x["channel_id"]).isdigit() else str(x["channel_id"]))
 
 
 @router.get("/channel-ownership")
@@ -447,7 +778,7 @@ async def put_channel_ownership(channel_id: int, payload: dict[str, Any]):
     if owner in (None, ""):
         clear_channel_ownership(channel_id)
         return {"success": True, "data": None}
-    return {"success": True, "data": set_channel_ownership(channel_id, str(owner), "manual")}
+    return {"success": True, "data": set_channel_ownership(channel_id, str(owner))}
 
 
 @router.delete("/channel-ownership/{channel_id}")
@@ -457,20 +788,13 @@ async def delete_channel_ownership(channel_id: int):
 
 
 def _attach_site_revenue(account_summaries: list[dict[str, Any]]) -> dict[str, float | None]:
-    """Attach site revenue using one owner per billing channel.
-
-    Manual channel ownership is authoritative. Automatic attribution only uses
-    the historical channel-id map or an unambiguous exact upstream key match.
-    """
+    """按已确认的渠道 ID/精确 Key，附加今日及累计本站收入。"""
     for summary in account_summaries:
         summary["site_revenue"] = None
         summary["site_revenue_total"] = None
         summary["site_profit"] = None
         summary["site_profit_total"] = None
         summary["site_revenue_status"] = "未归属/待设置"
-        summary["site_revenue_attributed"] = False
-        summary["site_channel_ids"] = []
-        summary["site_owner_source"] = None
 
     empty_totals = {"today_revenue": None, "total_revenue": None}
     if not SITE_BILLING_DB.exists():
@@ -479,7 +803,7 @@ def _attach_site_revenue(account_summaries: list[dict[str, Any]]) -> dict[str, f
         return empty_totals
 
     try:
-        local_now = datetime.now().astimezone()
+        local_now = _site_revenue_now()
         start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
         end = start + timedelta(days=1)
         with sqlite3.connect(f"file:{SITE_BILLING_DB}?mode=ro", uri=True) as conn:
@@ -504,108 +828,79 @@ def _attach_site_revenue(account_summaries: list[dict[str, Any]]) -> dict[str, f
     def amount(value: Any) -> float:
         return max(0.0, float(value or 0)) / qpu
 
-    revenue_by_channel = {
-        int(channel_id): {"key": str(key or ""), "today": amount(today), "total": amount(total)}
-        for channel_id, key, today, total in rows
-    }
+    revenue_by_key = {str(key): (amount(today), amount(total)) for _, key, today, total in rows if key}
+    revenue_by_channel = {int(channel_id): (amount(today), amount(total)) for channel_id, _, today, total in rows}
+    daily_overrides = SITE_DAILY_CHANNEL_ATTRIBUTION_OVERRIDES.get(local_now.date().isoformat(), {})
+    override_today_by_account: dict[str, float] = {}
+    for channel_id, target_account_id in daily_overrides.items():
+        override_today_by_account[target_account_id] = (
+            override_today_by_account.get(target_account_id, 0.0)
+            + revenue_by_channel.get(channel_id, (0.0, 0.0))[0]
+        )
     revenue_adjustments = _load_revenue_adjustments()
-    accounts_by_id = {str(s.get("id")): s for s in account_summaries}
-    manual = _load_channel_ownership()
-    static_reverse: dict[int, list[str]] = {}
-    for account_id, channel_ids in SITE_CHANNEL_IDS_BY_ACCOUNT.items():
-        if account_id not in accounts_by_id:
-            continue
-        for channel_id in channel_ids:
-            static_reverse.setdefault(int(channel_id), []).append(account_id)
-    key_reverse: dict[str, list[str]] = {}
-    for summary in account_summaries:
-        key = str(summary.get("upstream_key") or "").strip()
-        if key:
-            key_reverse.setdefault(key, []).append(str(summary.get("id")))
-
-    amounts_by_account: dict[str, list[float]] = {
-        str(s.get("id")): [0.0, 0.0] for s in account_summaries
+    manual_ownership = _load_channel_ownership()
+    account_ids = {str(summary.get("id")) for summary in account_summaries}
+    account_ids.add(SELF_POOL_ACCOUNT_ID)
+    if not any(str(summary.get("id")) == SELF_POOL_ACCOUNT_ID for summary in account_summaries):
+        account_summaries.append(_self_pool_summary())
+    manual_owner_by_channel = {
+        int(channel_id): str(item.get("owner_account_id") or "")
+        for channel_id, item in manual_ownership.items()
+        if str(channel_id).isdigit()
     }
-    channels_by_account: dict[str, list[int]] = {key: [] for key in amounts_by_account}
-    source_by_account: dict[str, set[str]] = {key: set() for key in amounts_by_account}
-    assigned_channel_ids: set[int] = set()
-    for channel_id, revenue in revenue_by_channel.items():
-        manual_item = manual.get(str(channel_id))
-        owner_id = None
-        source = None
-        if manual_item:
-            candidate = str(manual_item.get("owner_account_id") or "")
-            # A stale manual entry must not silently fall back to another account.
-            if candidate in accounts_by_id:
-                owner_id, source = candidate, "manual"
-        if owner_id is None and not manual_item:
-            static_candidates = list(dict.fromkeys(static_reverse.get(channel_id, [])))
-            if len(static_candidates) == 1:
-                owner_id, source = static_candidates[0], "channel_id"
-            else:
-                key_candidates = list(dict.fromkeys(key_reverse.get(revenue["key"], []))) if revenue["key"] else []
-                if len(key_candidates) == 1:
-                    owner_id, source = key_candidates[0], "upstream_key"
-        if owner_id is None:
-            continue
-        assigned_channel_ids.add(channel_id)
-        amounts_by_account[owner_id][0] += revenue["today"]
-        amounts_by_account[owner_id][1] += revenue["total"]
-        channels_by_account[owner_id].append(channel_id)
-        source_by_account[owner_id].add(source or "unknown")
-
+    manual_channels_by_account: dict[str, list[int]] = {account_id: [] for account_id in account_ids}
+    for channel_id, owner in manual_owner_by_channel.items():
+        if owner in account_ids:
+            manual_channels_by_account[owner].append(channel_id)
     matched_today = 0.0
     matched_total = 0.0
-    matched_today_cost = 0.0
-    matched_total_cost = 0.0
     for summary in account_summaries:
         account_id = str(summary.get("id") or "")
-        today, total = amounts_by_account.get(account_id, [0.0, 0.0])
-        channel_ids = sorted(set(channels_by_account.get(account_id, [])))
-        sources = source_by_account.get(account_id, set())
+        manual_channel_ids = manual_channels_by_account.get(account_id, [])
+        static_channel_ids = list(SITE_CHANNEL_IDS_BY_ACCOUNT.get(account_id, ()))
+        if account_id == SELF_POOL_ACCOUNT_ID:
+            mapped_channel_ids = tuple(dict.fromkeys(manual_channel_ids))
+        else:
+            mapped_channel_ids = tuple(dict.fromkeys(static_channel_ids + manual_channel_ids)) if (static_channel_ids or manual_channel_ids) else None
+        if mapped_channel_ids is not None:
+            today = sum(
+                revenue_by_channel.get(cid, (0.0, 0.0))[0]
+                for cid in mapped_channel_ids
+                if cid not in daily_overrides and manual_owner_by_channel.get(cid, account_id) == account_id
+            )
+            total = sum(
+                revenue_by_channel.get(cid, (0.0, 0.0))[1]
+                for cid in mapped_channel_ids
+                if manual_owner_by_channel.get(cid, account_id) == account_id
+            )
+            match_status = "已按手动归属匹配" if manual_channel_ids else (
+                "自建号池，暂无归属渠道" if account_id == SELF_POOL_ACCOUNT_ID
+                else f"已按本站渠道ID匹配 {len(mapped_channel_ids)} 条"
+            )
+        else:
+            key = str(summary.get("upstream_key") or "")
+            if not key:
+                continue
+            today, total = revenue_by_key.get(key, (0.0, 0.0))
+            match_status = "已按上游Key匹配" if key in revenue_by_key else "已匹配，今日无本站收入"
+        override_today = override_today_by_account.get(account_id, 0.0)
+        if override_today:
+            today += override_today
+            match_status += f" + 仅{local_now.date().isoformat()}今日归属修正"
         adjustment = revenue_adjustments.get(account_id) or {}
         manual_total = max(0.0, float(adjustment.get("historical_revenue", 0) or 0))
         total += manual_total
-        attributed = bool(channel_ids or manual_total)
-        if attributed:
-            if "manual" in sources:
-                match_status = "已按手动归属匹配"
-            elif "channel_id" in sources:
-                match_status = f"已按本站渠道ID匹配 {len(SITE_CHANNEL_IDS_BY_ACCOUNT.get(account_id, channel_ids))} 条"
-            elif "upstream_key" in sources:
-                match_status = "已按上游Key匹配"
-            else:
-                match_status = "已归属"
-            if manual_total:
-                match_status += " + 历史补账"
-        else:
-            # An explicitly configured key with no billing rows is a known
-            # account with zero revenue; an account without a key remains
-            # unowned so its cost cannot become a fake negative profit.
-            key_value = str(summary.get("upstream_key") or "").strip()
-            key_candidates = key_reverse.get(key_value, []) if key_value else []
-            billing_keys = {row["key"] for row in revenue_by_channel.values() if row["key"]}
-            has_known_zero = bool(key_value) and key_value not in billing_keys
-            match_status = "已匹配，今日无本站收入" if has_known_zero else "未归属/待设置"
-            if has_known_zero:
-                attributed = True
-        summary["site_revenue"] = round(today, 4) if attributed else None
-        summary["site_revenue_total"] = round(total, 4) if attributed else None
-        summary["site_revenue_attributed"] = attributed
-        summary["site_channel_ids"] = channel_ids
-        summary["site_owner_source"] = ("manual" if "manual" in sources else next(iter(sources), None))
+        if manual_total:
+            match_status += " + 历史补账"
+        summary["site_revenue"] = round(today, 4)
+        summary["site_revenue_total"] = round(total, 4)
         today_cost = summary.get("today_cost")
         total_cost = summary.get("total_cost")
-        summary["site_profit"] = round(today - float(today_cost), 4) if attributed and today_cost is not None else None
-        summary["site_profit_total"] = round(total - float(total_cost), 4) if attributed and total_cost is not None else None
+        summary["site_profit"] = round(today - float(today_cost), 4) if today_cost is not None else None
+        summary["site_profit_total"] = round(total - float(total_cost), 4) if total_cost is not None else None
         summary["site_revenue_status"] = match_status
-        if attributed:
-            matched_today += today
-            matched_total += total
-            if summary.get("today_cost") is not None:
-                matched_today_cost += max(0.0, float(summary["today_cost"] or 0))
-            if summary.get("total_cost") is not None:
-                matched_total_cost += max(0.0, float(summary["total_cost"] or 0))
+        matched_today += today
+        matched_total += total
 
     # 顶部收入必须和 Hub 渠道成本使用同一归属集合，避免把未归属流水算进利润。
     return {"today_revenue": round(matched_today, 4),
@@ -613,10 +908,25 @@ def _attach_site_revenue(account_summaries: list[dict[str, Any]]) -> dict[str, f
             "site_today_revenue": round(sum(amount(row[2]) for row in rows), 4),
             "site_total_revenue": round(sum(amount(row[3]) for row in rows), 4),
             "matched_today": round(matched_today, 4),
-            "matched_total": round(matched_total, 4),
-            "attributed_today_cost": round(matched_today_cost, 4),
-            "attributed_total_cost": round(matched_total_cost, 4),
-            "unmatched_channel_ids": sorted(set(revenue_by_channel) - assigned_channel_ids)}
+            "matched_total": round(matched_total, 4)}
+
+
+def _welfare_deductions() -> dict[str, float]:
+    """Return durable New API welfare payouts in site currency, read-only."""
+    result = {"ranking": 0.0, "lottery": 0.0}
+    if not SITE_BILLING_DB.exists():
+        return result
+    try:
+        with sqlite3.connect(f"file:{SITE_BILLING_DB}?mode=ro", uri=True, timeout=5) as conn:
+            qpu_row = conn.execute("SELECT value FROM options WHERE key = 'QuotaPerUnit'").fetchone()
+            qpu = float(qpu_row[0]) if qpu_row and float(qpu_row[0]) > 0 else 1_000_000.0
+            ranking = conn.execute("SELECT COALESCE(SUM(reward_quota), 0) FROM weekly_ranking_rewards").fetchone()[0]
+            lottery = conn.execute("SELECT COALESCE(SUM(prize_amount), 0) FROM lottery_draws").fetchone()[0]
+            result["ranking"] = round(max(0.0, float(ranking or 0)) / qpu, 4)
+            result["lottery"] = round(max(0.0, float(lottery or 0)), 4)
+    except (OSError, sqlite3.Error, TypeError, ValueError):
+        return {"ranking": None, "lottery": None}
+    return result
 
 
 # === 账号管理 ===
@@ -721,6 +1031,56 @@ async def _account_summary(account: dict) -> dict[str, Any]:
 
 
 # === 账号管理 ===
+
+
+@router.get("/accounts/{account_id}/manual-costs")
+async def list_manual_costs(account_id: str):
+    if account_id != SELF_POOL_ACCOUNT_ID:
+        raise HTTPException(status_code=404, detail="该账号不支持手工成本")
+    rows = sorted(
+        _load_self_pool_costs(),
+        key=lambda row: (str(row.get("cost_date", "")), str(row.get("created_at", ""))),
+        reverse=True,
+    )
+    return {"success": True, "data": rows, "totals": _self_pool_cost_totals()}
+
+
+@router.post("/accounts/{account_id}/manual-costs")
+async def add_manual_cost(account_id: str, payload: SelfPoolCostCreate):
+    if account_id != SELF_POOL_ACCOUNT_ID:
+        raise HTTPException(status_code=404, detail="该账号不支持手工成本")
+    amount = float(payload.amount)
+    if not math.isfinite(amount) or amount <= 0 or amount > 100000000:
+        raise HTTPException(status_code=400, detail="成本必须是大于 0 的有效金额")
+    note = payload.note.strip()
+    if len(note) > 100:
+        raise HTTPException(status_code=400, detail="备注不能超过 100 个字符")
+    rows = _load_self_pool_costs()
+    entry = {
+        "id": str(uuid.uuid4()),
+        "amount": round(amount, 4),
+        "cost_date": payload.cost_date.isoformat(),
+        "note": note,
+        "created_at": datetime.now().astimezone().isoformat(),
+    }
+    rows.append(entry)
+    _save_self_pool_costs(rows)
+    _cache_invalidate("dashboard")
+    return {"success": True, "data": entry, "totals": _self_pool_cost_totals()}
+
+
+@router.delete("/accounts/{account_id}/manual-costs/{entry_id}")
+async def delete_manual_cost(account_id: str, entry_id: str):
+    if account_id != SELF_POOL_ACCOUNT_ID:
+        raise HTTPException(status_code=404, detail="该账号不支持手工成本")
+    rows = _load_self_pool_costs()
+    kept = [row for row in rows if str(row.get("id")) != entry_id]
+    if len(kept) == len(rows):
+        raise HTTPException(status_code=404, detail="成本记录不存在")
+    _save_self_pool_costs(kept)
+    _cache_invalidate("dashboard")
+    return {"success": True, "totals": _self_pool_cost_totals()}
+
 
 @router.get("/accounts")
 async def list_accounts():
@@ -1085,7 +1445,7 @@ async def refresh_token(account_id: str):
                     acc["user_id"] = adapter.user_id
                 # 校正凭据类型
                 if acc.get("platform") == "newapi":
-                    acc["credential_type"] = "cookie"
+                    acc["credential_type"] = getattr(adapter, "credential_type", "cookie")
                 elif acc.get("platform") == "sub2api":
                     acc["credential_type"] = "bearer"
                 break
@@ -1160,9 +1520,12 @@ async def _build_dashboard(force_snapshot: bool = False) -> dict[str, Any]:
     account_summaries = list(await asyncio.gather(
         *(_account_summary(account) for account in accounts)
     ))
+    account_summaries.append(_self_pool_summary())
     _attach_usage_ledger(account_summaries)
     _attach_usage_history(account_summaries)
     revenue_totals = _attach_site_revenue(account_summaries)
+    welfare = _welfare_deductions()
+    await _send_low_balance_alerts(account_summaries)
     for summary in account_summaries:
         summary.pop("upstream_key", None)
 
@@ -1194,8 +1557,9 @@ async def _build_dashboard(force_snapshot: bool = False) -> dict[str, Any]:
         "total_revenue": revenue_totals.get("site_total_revenue"),
         "attributed_today_revenue": revenue_totals.get("matched_today"),
         "attributed_total_revenue": revenue_totals.get("matched_total"),
-        "attributed_today_cost": revenue_totals.get("attributed_today_cost"),
-        "attributed_total_cost": revenue_totals.get("attributed_total_cost"),
+        "ranking_welfare": welfare.get("ranking"),
+        "lottery_welfare": welfare.get("lottery"),
+        "welfare_total": round((welfare.get("ranking") or 0) + (welfare.get("lottery") or 0), 4) if welfare.get("ranking") is not None and welfare.get("lottery") is not None else None,
         "unmatched_today_revenue": round(
             (revenue_totals.get("site_today_revenue") or 0) - (revenue_totals.get("matched_today") or 0), 4
         ),
@@ -1214,6 +1578,48 @@ async def _build_dashboard(force_snapshot: bool = False) -> dict[str, Any]:
     if force_snapshot:
         _save_snapshot_to_history()
     return result
+
+
+async def _refresh_dashboard_cache(force_snapshot: bool = True) -> dict[str, Any]:
+    """Refresh the shared dashboard cache once, serializing all callers."""
+    global _refreshing, _dashboard_refresh_last_error, _dashboard_refresh_last_error_at
+    async with _refresh_lock:
+        _refreshing = True
+        try:
+            result = await _build_dashboard(force_snapshot=force_snapshot)
+            _dashboard_refresh_last_error = ""
+            _dashboard_refresh_last_error_at = 0
+            return result
+        except Exception as exc:
+            _dashboard_refresh_last_error = str(exc)[:300]
+            _dashboard_refresh_last_error_at = int(time.time())
+            raise
+        finally:
+            _refreshing = False
+
+
+async def dashboard_cache_refresh_loop():
+    """Keep dashboard balances/usage warm even when no browser is open."""
+    await asyncio.sleep(15)
+    while True:
+        settings = _load_settings()
+        enabled = bool(settings.get("dashboard_auto_refresh_enabled", True))
+        try:
+            interval = int(settings.get("dashboard_auto_refresh_interval", 300) or 300)
+        except (TypeError, ValueError):
+            interval = 300
+        if interval not in DASHBOARD_REFRESH_INTERVALS:
+            interval = 300
+
+        cached = _cache.get("dashboard", {})
+        cache_age = time.time() - float(cached.get("ts", 0) or 0)
+        if enabled and not _refresh_lock.locked() and cache_age >= interval:
+            try:
+                await _refresh_dashboard_cache(force_snapshot=True)
+            except Exception as exc:
+                _refresh_log(f"仪表盘后台刷新失败: {exc}")
+
+        await asyncio.sleep(15 if enabled else 30)
 
 
 @router.get("/dashboard")
@@ -1242,8 +1648,6 @@ async def dashboard(force: bool = Query(False, description="强制刷新，忽�
             out["total_revenue"] = cached_revenue_totals.get("site_total_revenue")
             out["attributed_today_revenue"] = cached_revenue_totals.get("matched_today")
             out["attributed_total_revenue"] = cached_revenue_totals.get("matched_total")
-            out["attributed_today_cost"] = cached_revenue_totals.get("attributed_today_cost")
-            out["attributed_total_cost"] = cached_revenue_totals.get("attributed_total_cost")
             out["unmatched_today_revenue"] = round(
                 (cached_revenue_totals.get("site_today_revenue") or 0) - (cached_revenue_totals.get("matched_today") or 0), 4
             )
@@ -1274,26 +1678,61 @@ async def dashboard(force: bool = Query(False, description="强制刷新，忽�
         out["refreshing"] = True
         return {"success": True, "data": out}
 
-    async with _refresh_lock:
-        _refreshing = True
-        try:
-            result = await _build_dashboard(force_snapshot=True)
-            return {"success": True, "data": result}
-        finally:
-            _refreshing = False
+    try:
+        result = await _refresh_dashboard_cache(force_snapshot=True)
+        return {"success": True, "data": result}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"仪表盘刷新失败: {exc}")
 
 
 @router.get("/dashboard/status")
 async def dashboard_status():
-    """轻量状态：前端轮询是否还在后台刷新"""
-    cached = _cache.get("dashboard", {}).get("data")
+    """Lightweight cache/refresh state for the header controls."""
+    cached_entry = _cache.get("dashboard", {})
+    cached = cached_entry.get("data") or {}
+    settings = _load_settings()
+    try:
+        interval = int(settings.get("dashboard_auto_refresh_interval", 300) or 300)
+    except (TypeError, ValueError):
+        interval = 300
+    if interval not in DASHBOARD_REFRESH_INTERVALS:
+        interval = 300
+    cached_at = int(cached.get("cached_at", 0) or 0)
+    age = max(0, int(time.time()) - cached_at) if cached_at else None
+    next_refresh_in = max(0, interval - age) if age is not None else 0
     return {
         "success": True,
         "data": {
             "refreshing": _refreshing,
-            "has_cache": bool(cached and cached.get("accounts")),
-            "cached_at": (cached or {}).get("cached_at", 0),
+            "has_cache": bool(cached.get("accounts")),
+            "cached_at": cached_at,
+            "cache_age": age,
+            "auto_refresh_enabled": bool(settings.get("dashboard_auto_refresh_enabled", True)),
+            "auto_refresh_interval": interval,
+            "next_refresh_in": next_refresh_in,
+            "last_error": _dashboard_refresh_last_error,
+            "last_error_at": _dashboard_refresh_last_error_at,
         },
+    }
+
+
+@router.post("/dashboard/auto-refresh")
+async def update_dashboard_auto_refresh(req: DashboardAutoRefreshUpdate):
+    """Persist the server-side dashboard refresh switch and interval."""
+    interval = int(req.interval or 300)
+    if interval not in DASHBOARD_REFRESH_INTERVALS:
+        raise HTTPException(status_code=400, detail="刷新间隔仅支持 5、10 或 30 分钟")
+    settings = _load_settings()
+    settings["dashboard_auto_refresh_enabled"] = bool(req.enabled)
+    settings["dashboard_auto_refresh_interval"] = interval
+    _save_settings(settings)
+    return {
+        "success": True,
+        "data": {
+            "auto_refresh_enabled": bool(req.enabled),
+            "auto_refresh_interval": interval,
+        },
+        "message": "后台自动刷新设置已保存",
     }
 
 
@@ -1303,7 +1742,8 @@ async def dashboard_status():
 async def get_settings():
     """获取系统设置"""
     settings = _load_settings()
-    combination_order = normalize_combination_order(settings.get("channel_combination_order"))
+    pool_names = list_channel_group_names()
+    combination_order = normalize_combination_order(settings.get("channel_combination_order"), pool_names)
     cs_key = settings.get("capsolver_api_key", "")
     masked = ""
     if cs_key:
@@ -1334,9 +1774,16 @@ async def get_settings():
             "show_today_dataset": settings.get("show_today_dataset", True),
             "show_total_dataset": settings.get("show_total_dataset", True),
             "mask_channel_urls": settings.get("mask_channel_urls", False),
+            "mask_channel_names": settings.get("mask_channel_names", False),
             "group_filter_keyword": settings.get("group_filter_keyword", ""),
             "channel_combination_order": combination_order,
-            "channel_combination_options": list(COMBINATION_OPTIONS),
+            "channel_combination_options": combination_options(),
+            "smtp_alert_enabled": bool(settings.get("smtp_alert_enabled", False)),
+            "smtp_alert_threshold": settings.get("smtp_alert_threshold", SMTP_ALERT_DEFAULT_THRESHOLD),
+            "smtp_alert_recipients": settings.get("smtp_alert_recipients", ""),
+            "smtp_alert_cooldown_hours": settings.get("smtp_alert_cooldown_hours", SMTP_ALERT_DEFAULT_COOLDOWN_HOURS),
+            "smtp_alert_max_repeats": _smtp_max_repeats(settings),
+            "smtp_config": _smtp_config_status(),
         },
     }
 
@@ -1364,6 +1811,7 @@ async def update_settings(req: SettingsUpdate):
         "show_today_dataset",
         "show_total_dataset",
         "mask_channel_urls",
+        "mask_channel_names",
     ):
         value = getattr(req, key)
         if value is not None:
@@ -1372,11 +1820,61 @@ async def update_settings(req: SettingsUpdate):
         settings["group_filter_keyword"] = req.group_filter_keyword.strip()[:64]
     if req.channel_combination_order is not None:
         try:
-            settings["channel_combination_order"] = validate_combination_order(req.channel_combination_order)
+            settings["channel_combination_order"] = validate_combination_order(
+                req.channel_combination_order,
+                list_channel_group_names(),
+            )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if req.smtp_alert_enabled is not None:
+        settings["smtp_alert_enabled"] = req.smtp_alert_enabled
+    if req.smtp_alert_threshold is not None:
+        if not math.isfinite(req.smtp_alert_threshold) or req.smtp_alert_threshold < 0 or req.smtp_alert_threshold > 100000000:
+            raise HTTPException(status_code=422, detail="余额阈值必须是 0 到 100000000 之间的有效数字")
+        settings["smtp_alert_threshold"] = round(req.smtp_alert_threshold, 6)
+    if req.smtp_alert_recipients is not None:
+        recipients = _parse_recipients(req.smtp_alert_recipients, "")
+        if req.smtp_alert_recipients.strip() and not recipients:
+            raise HTTPException(status_code=422, detail="收件人邮箱格式无效")
+        settings["smtp_alert_recipients"] = ",".join(recipients)
+    if req.smtp_alert_cooldown_hours is not None:
+        if not math.isfinite(req.smtp_alert_cooldown_hours) or req.smtp_alert_cooldown_hours < 0 or req.smtp_alert_cooldown_hours > 8760:
+            raise HTTPException(status_code=422, detail="重复提醒间隔必须是 0 到 8760 小时之间的有效数字")
+        settings["smtp_alert_cooldown_hours"] = round(req.smtp_alert_cooldown_hours, 4)
+    if req.smtp_alert_max_repeats is not None:
+        if req.smtp_alert_max_repeats < 1 or req.smtp_alert_max_repeats > 100:
+            raise HTTPException(status_code=422, detail="最大重复提醒次数必须在 1 到 100 之间")
+        settings["smtp_alert_max_repeats"] = req.smtp_alert_max_repeats
+    else:
+        # Normalize legacy/null values even when another setting is saved.
+        settings["smtp_alert_max_repeats"] = _smtp_max_repeats(settings)
     _save_settings(settings)
     return {"success": True, "message": "设置已保存"}
+
+
+@router.post("/settings/smtp-test")
+async def smtp_test():
+    """Send a user-requested test message using the New API SMTP settings."""
+    settings = _load_settings()
+    recipients = _parse_recipients(str(settings.get("smtp_alert_recipients", "")), "")
+    if not recipients:
+        try:
+            recipients = _parse_recipients("", _smtp_option_values().get("SMTPAccount", ""))
+        except (OSError, sqlite3.Error) as exc:
+            raise HTTPException(status_code=502, detail=f"无法读取 New API SMTP 配置: {exc}") from exc
+    try:
+        await asyncio.wait_for(
+            asyncio.to_thread(
+                _send_smtp_message,
+                "Hub SMTP 测试邮件",
+                "这是一封由 API Hub 设置页发出的测试邮件。",
+                recipients,
+            ),
+            timeout=SMTP_ALERT_SEND_TIMEOUT + 5,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"SMTP 测试邮件发送失败: {exc}") from exc
+    return {"success": True, "message": "测试邮件已发送", "recipient_count": len(recipients)}
 
 
 @router.get("/settings/capsolver-balance")
@@ -1414,6 +1912,8 @@ def _save_snapshot_to_history():
         "accounts": [],
     }
     for acc in accounts:
+        if acc.get("virtual") or acc.get("id") == SELF_POOL_ACCOUNT_ID:
+            continue
         entry = {
             "id": acc.get("id"),
             "name": acc.get("name"),
@@ -2559,9 +3059,9 @@ async def run_all_probes(only_enabled: bool = Query(True)):
 
 # === Token 自动续期后台任务 ===
 
-# 扫描周期与续期阈值：周期远小于 24h token 寿命，保证一次失败后仍有多次重试机会
-AUTO_REFRESH_INTERVAL = 6 * 3600
-AUTO_REFRESH_THRESHOLD = 8 * 3600
+# 扫描周期需覆盖短期 token（AI8 当前约 30 分钟），并给临时登录失败留重试窗口。
+AUTO_REFRESH_INTERVAL = 10 * 60
+AUTO_REFRESH_THRESHOLD = 20 * 60
 AUTO_REFRESH_LOG = DATA_DIR / "token_refresh.log"
 
 
@@ -2633,7 +3133,11 @@ async def _refresh_one(account: dict) -> tuple[bool, str]:
             account["refresh_token"] = adapter.refresh_token
         if getattr(adapter, "user_id", ""):
             account["user_id"] = adapter.user_id
-        account["credential_type"] = "cookie" if platform == "newapi" else "bearer"
+        account["credential_type"] = (
+            getattr(adapter, "credential_type", "cookie")
+            if platform == "newapi"
+            else "bearer"
+        )
         return True, "账号密码重登"
     except Exception as e:
         return False, f"登录失败: {e}"
