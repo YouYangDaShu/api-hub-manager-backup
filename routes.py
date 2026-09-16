@@ -896,8 +896,11 @@ def _attach_site_revenue(account_summaries: list[dict[str, Any]]) -> dict[str, f
         summary["site_revenue_total"] = round(total, 4)
         today_cost = summary.get("today_cost")
         total_cost = summary.get("total_cost")
+        rebate = float(summary.get("aff_history_quota") or 0.0)
         summary["site_profit"] = round(today - float(today_cost), 4) if today_cost is not None else None
-        summary["site_profit_total"] = round(total - float(total_cost), 4) if total_cost is not None else None
+        profit_base = round(total - float(total_cost), 4) if total_cost is not None else None
+        summary["site_profit_base"] = profit_base
+        summary["site_profit_total"] = round(profit_base + rebate, 4) if profit_base is not None else None
         summary["site_revenue_status"] = match_status
         matched_today += today
         matched_total += total
@@ -999,6 +1002,9 @@ async def _account_summary(account: dict) -> dict[str, Any]:
     else:
         s["balance"] = balance_r.get("balance", 0)
         s["group"] = balance_r.get("group", "")
+        s["aff_count"] = balance_r.get("aff_count", 0)
+        s["aff_quota"] = balance_r.get("aff_quota", 0.0)
+        s["aff_history_quota"] = balance_r.get("aff_history_quota", 0.0)
 
     # 消耗
     if isinstance(usage_r, Exception):
@@ -1515,6 +1521,7 @@ async def _build_dashboard(force_snapshot: bool = False) -> dict[str, Any]:
     total_balance = 0.0
     today_cost = 0.0
     total_cost = 0.0
+    total_rebate = 0.0
     error_count = 0
 
     account_summaries = list(await asyncio.gather(
@@ -1546,6 +1553,11 @@ async def _build_dashboard(force_snapshot: bool = False) -> dict[str, Any]:
                 total_cost += float(s["total_cost"] or 0)
             except (TypeError, ValueError):
                 pass
+        if s.get("aff_history_quota") is not None:
+            try:
+                total_rebate += float(s["aff_history_quota"] or 0)
+            except (TypeError, ValueError):
+                pass
         if s.get("error") and "User API Key" not in str(s.get("error", "")):
             error_count += 1
 
@@ -1553,6 +1565,7 @@ async def _build_dashboard(force_snapshot: bool = False) -> dict[str, Any]:
         "total_balance": round(total_balance, 4),
         "today_cost": round(today_cost, 4),
         "total_cost": round(total_cost, 4),
+        "total_rebate": round(total_rebate, 4),
         "today_revenue": revenue_totals.get("site_today_revenue"),
         "total_revenue": revenue_totals.get("site_total_revenue"),
         "attributed_today_revenue": revenue_totals.get("matched_today"),

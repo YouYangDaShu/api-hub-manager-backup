@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="light dark">
     <title>幽羊 API · 中转站渠道整合管理</title>
-    <link rel="stylesheet" href="static/style.css?v=20260908-nav-width-800">
+    <link rel="stylesheet" href="static/style.css?v=20260916-rebate-v2">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
     <script>
     // Keep topbar context synchronized with the existing page switcher.
@@ -28,6 +28,8 @@
     </script>
 </head>
 <body>
+<div id="starfield" aria-hidden="true"><div id="stars"></div><div id="stars2"></div><div id="stars3"></div></div>
+
     <div class="app-shell">
       <aside class="rail" aria-label="主导航">
             <div class="logo">
@@ -1432,24 +1434,40 @@ root.addEventListener('mask-channel-urls-change',()=>render());root.addEventList
         }, delayMs);
     }
 
+    function extractSiteIdentity(url) {
+        if (!url) return '';
+        try {
+            const u = new URL(url);
+            let host = u.hostname.toLowerCase();
+            const parts = host.split('.');
+            if (parts.length > 2 && ['max', 'api', 'app', 'vip', 'one'].includes(parts[0])) {
+                return parts.slice(1).join('.');
+            }
+            return host;
+        } catch(e) {
+            return (url || '').replace(/\/$/, '').toLowerCase();
+        }
+    }
+
     function aggregateSameSiteAccounts(accounts) {
         const groups = [];
         const bySite = new Map();
         for (const account of accounts) {
-            const site = (account.base_url || '').replace(/\/$/, '').toLowerCase();
+            const site = extractSiteIdentity(account.base_url);
             // 只聚合同一站点且名称明显属于主号/副号的账号；不误合并同站点的其他独立账号。
-            const name = account.name || '';
-            const match = name.match(/^(.*?)(?:主号|副号)$/);
+            const name = (account.name || '').trim();
+            const match = name.match(/^(.*?)(?:\s*主号|\s*副号)$/);
             if (!site || !match) {
                 groups.push({ ...account, _aggregate_key: account.id });
                 continue;
             }
-            const key = `${site}::${match[1]}`;
+            const prefix = match[1].trim();
+            const key = `${site}::${prefix}`;
             if (!bySite.has(key)) {
                 const aggregate = {
                     ...account,
                     id: `aggregate:${key}`,
-                    name: match[1],
+                    name: prefix,
                     _aggregate: true,
                     _members: [],
                     groups: [],
@@ -1459,9 +1477,13 @@ root.addEventListener('mask-channel-urls-change',()=>render());root.addEventList
                     site_revenue_total: 0,
                     site_profit: 0,
                     site_profit_total: 0,
+                    site_profit_base: 0,
                     yesterday_cost: 0,
                     recent_cost: 0,
                     total_cost: 0,
+                    aff_count: 0,
+                    aff_quota: 0,
+                    aff_history_quota: 0,
                 };
                 bySite.set(key, aggregate);
                 groups.push(aggregate);
@@ -1469,7 +1491,7 @@ root.addEventListener('mask-channel-urls-change',()=>render());root.addEventList
             const aggregate = bySite.get(key);
             aggregate._members.push(account);
             aggregate.groups.push(...(account.groups || []).map(g => ({ ...g, _account_name: name })));
-            for (const field of ['balance', 'today_cost', 'site_revenue', 'site_revenue_total', 'site_profit', 'site_profit_total', 'yesterday_cost', 'recent_cost', 'total_cost']) {
+            for (const field of ['balance', 'today_cost', 'site_revenue', 'site_revenue_total', 'site_profit', 'site_profit_total', 'site_profit_base', 'yesterday_cost', 'recent_cost', 'total_cost', 'aff_count', 'aff_quota', 'aff_history_quota']) {
                 const value = Number(account[field]);
                 if (Number.isFinite(value)) aggregate[field] = (Number(aggregate[field]) || 0) + value;
             }
@@ -1506,7 +1528,8 @@ root.addEventListener('mask-channel-urls-change',()=>render());root.addEventList
         const todayProfit = attributedTodayRevenue == null ? '—' : money(attributedTodayRevenue - Number(data.today_cost || 0));
         const totalProfitBase = attributedTotalRevenue == null ? null : attributedTotalRevenue - Number(data.total_cost || 0);
         const welfareTotal = data.welfare_total == null ? null : Number(data.welfare_total);
-        const totalProfitNet = totalProfitBase == null || welfareTotal == null ? null : totalProfitBase - welfareTotal;
+        const totalRebate = Number(data.total_rebate || 0);
+        const totalProfitNet = totalProfitBase == null ? null : totalProfitBase - (welfareTotal || 0) + totalRebate;
         const totalProfit = totalProfitNet == null ? '—' : money(totalProfitNet);
         const todayProfitClass = attributedTodayRevenue == null ? '' : (attributedTodayRevenue - Number(data.today_cost || 0) >= 0 ? 'c-green' : 'c-red');
         const totalProfitClass = totalProfitNet == null ? '' : (totalProfitNet >= 0 ? 'c-green' : 'c-red');
@@ -1561,8 +1584,8 @@ root.addEventListener('mask-channel-urls-change',()=>render());root.addEventList
             <div class="stat-box">
                 <div class="label">累计盈亏</div>
                 <div class="num ${totalProfitClass}">${esc(totalProfit)}</div>
-                <div class="hint">收入 - 上游成本 - 排行榜福利 - 抽奖福利</div>
-                <div class="hint welfare-breakdown">排行榜 ${esc(money(data.ranking_welfare))} · 抽奖 ${esc(money(data.lottery_welfare))}</div>
+                <div class="hint">整站收入 - 上游成本 - 福利${totalRebate > 0 ? ` + 上游返利 ${esc(money(totalRebate))}` : ''}</div>
+                <div class="hint welfare-breakdown">排行榜 ${esc(money(data.ranking_welfare))} · 抽奖 ${esc(money(data.lottery_welfare))}${totalRebate > 0 ? ` · 累计返利 +${esc(money(totalRebate))}` : ''}</div>
             </div>
             <div class="stat-box">
                 <div class="label">渠道 / 异常</div>
@@ -1903,6 +1926,7 @@ function getCategoryTag(cat) {
                     <span class="ch-name">${maskName(acc.name)}</span>
                     <span class="ch-tag tag-${esc(acc.platform)}">${esc(acc.platform)}</span>
                     <span class="ch-tag tag-other">${members.length} 个账号合并</span>
+                    ${Number(acc.aff_history_quota) > 0 ? `<span class="ch-tag" style="background:rgba(52,199,89,0.15);color:#34c759;border:1px solid rgba(52,199,89,0.3);font-weight:600;" title="上游累计邀请返利（100% 纯收益）">🎁 累计返利 ${money(acc.aff_history_quota)}</span>` : ''}
                     <span class="ch-url" title="${maskUrl(acc.base_url)}"><a href="${esc(acc.base_url)}" target="_blank" rel="noopener noreferrer">${maskUrl(acc.base_url)}</a></span>
                 </div>
                 <div class="ch-actions merged-account-actions">
@@ -1917,7 +1941,7 @@ function getCategoryTag(cat) {
                 <div class="ch-metric"><div class="label">昨日消耗</div><div class="val">${esc(yesterday)}</div></div>
                 <div class="ch-metric"><div class="label">累计消耗</div><div class="val">${esc(total)}</div></div>
                 <div class="ch-metric" title="合并累计本站消费收入"><div class="label">累计收入</div><div class="val green">${esc(revenueTotal)}</div></div>
-                <div class="ch-metric" title="合并累计收入 - 合并累计上游消耗"><div class="label">累计盈亏</div><div class="val ${profitTotalClass}">${esc(profitTotal)}</div></div>
+                <div class="ch-metric" title="${acc.site_profit_base != null ? `跑量盈亏 ${money(acc.site_profit_base)} + 上游返利 ${money(acc.aff_history_quota || 0)}` : '合并累计收入 - 合并累计上游消耗 + 上游返利'}"><div class="label">累计盈亏</div><div class="val ${profitTotalClass}">${esc(profitTotal)}</div></div>
             </div>
             ${groupsHtml}
             ${acc.error ? `<div class="ch-error">⚠ ${esc(acc.error)}</div>` : ''}
@@ -1990,6 +2014,7 @@ function getCategoryTag(cat) {
                     ${rr !== 1 ? `<span class="ch-tag tag-other" title="充值比例 1:${esc(rr)}，倍率已归一化">1:${esc(rr)}</span>` : ''}
                     ${memberLine}
                     ${isVirtual ? '' : `<span class="ch-url" title="${maskUrl(acc.base_url)}"><a href="${esc(acc.base_url)}" target="_blank" rel="noopener noreferrer">${maskUrl(acc.base_url)}</a></span>`}
+                    ${Number(acc.aff_history_quota) > 0 ? `<span class="ch-tag" style="background:rgba(52,199,89,0.15);color:#34c759;border:1px solid rgba(52,199,89,0.3);font-weight:600;" title="上游累计邀请返利（100% 纯收益）">🎁 累计返利 ${money(acc.aff_history_quota)}</span>` : ''}
                 </div>
                 <div class="ch-actions">
                     ${acc._aggregate ? `<span class="ch-tag tag-other">${acc._members.length} 个账号已合并</span>` : (isVirtual ? `
@@ -2010,7 +2035,7 @@ function getCategoryTag(cat) {
                 <div class="ch-metric"><div class="label">昨日消耗</div><div class="val">${esc(yesterday)}</div></div>
                 <div class="ch-metric"><div class="label">累计消耗</div><div class="val">${esc(total)}</div></div>
                 <div class="ch-metric" title="累计本站消费收入"><div class="label">累计收入</div><div class="val green">${esc(revenueTotal)}</div></div>
-                <div class="ch-metric" title="累计收入 - 累计上游消耗"><div class="label">累计盈亏</div><div class="val ${profitTotalClass}">${esc(profitTotal)}</div></div>
+                <div class="ch-metric" title="${acc.site_profit_base != null ? `跑量盈亏 ${money(acc.site_profit_base)} + 上游返利 ${money(acc.aff_history_quota || 0)}` : '累计收入 - 累计上游消耗 + 上游返利'}"><div class="label">累计盈亏</div><div class="val ${profitTotalClass}">${esc(profitTotal)}</div></div>
             </div>
             ${groupsHtml}
             ${hasNote ? `<div style="padding:10px 22px;font-size:12px;color:var(--text-muted);background:var(--primary-soft)">ℹ ${esc(hasNote)}</div>` : ''}

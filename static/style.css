@@ -4395,3 +4395,124 @@ html {
 .channel-ownership-row.ownership-pending {
   border-left: 3px solid #FF9F0A;
 }
+/* ==========================================================================
+   Starfield background (dark theme only) — 2026-09-16
+   Pure-CSS three-layer parallax star background.
+   ========================================================================== */
+
+#starfield {
+  display: none;
+}
+
+html[data-theme="dark"] #starfield {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+#starfield #stars,
+#starfield #stars2,
+#starfield #stars3 {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: transparent;
+  border-radius: 50%;
+}
+
+#starfield #stars {
+  width: 1px;
+  height: 1px;
+  box-shadow:
+    748px 171px #fff, 347px 490px #fff, 140px 872px #fff,
+    818px 659px #fff, 806px 327px #fff, 386px 575px #fff,
+    550px 463px #fff, 148px 687px #fff, 651px 683px #fff,
+    588px 194px #fff, 831px 2px #fff, 581px 876px #fff,
+    396px 743px #fff, 212px 810px #fff, 421px 920px #fff,
+    658px 461px #fff, 859px 809px #fff, 456px 388px #fff,
+    186px 627px #fff, 528px 145px #fff, 171px 97px #fff,
+    674px 72px #fff, 676px 52px #fff, 165px 131px #fff,
+    88px 781px #fff, 231px 948px #fff, 330px 257px #fff,
+    426px 46px #fff, 549px 652px #fff, 338px 74px #fff,
+    749px 364px #fff, 931px 369px #fff, 383px 428px #fff,
+    558px 389px #fff, 927px 133px #fff, 234px 888px #fff,
+    785px 617px #fff, 556px 643px #fff, 401px 275px #fff,
+    406px 644px #fff, 253px 852px #fff, 599px 883px #fff,
+    744px 721px #fff, 524px 297px #fff, 226px 177px #fff,
+    679px 55px #fff, 874px 811px #fff, 838px 790px #fff,
+    241px 430px #fff, 676px 652px #fff, 191px 568px #fff,
+    53px 990px #fff, 163px 237px #fff, 61px 223px #fff,
+    592px 456px #fff, 844px 271px #fff, 324px 488px #fff,
+    373px 717px #fff, 822px 709px #fff, 464px 941px #fff,
+    445px 118px #fff, 991px 414px #fff, 964px 76px #fff,
+    108px 172px #fff, 641px 722px #fff, 539px 427px #fff,
+    697px 45px #fff, 301px 353px #fff, 106px 329px #fff,
+    967px 396px #fff, 493px 301px #fff, 228px 406px #fff,
+    211px 653px #fff, 444px 822px #fff, 746px 353px #fff,
+    449px 381px #fff, 671px 887px #fff, 650px 138px #fff,
+    30px 839px #fff, 94px 405px #fff, 273px 796px #fff,
+    618px 964px #fff, 45px 849px #fff, 472px 155px #fff,
+    529px 312px #fff, 728px 448px #fff, 44px 908px #fff,
+    691px 818px #fff, 254px 293px #fff, 981px 133px #fff,
+    307px 375px #fff, 196px 316px #fff, 241px 975px #fff,
+    138px 706px #fff, 769px 463px #fff, 768px 428px #fff,
+    730px 590px #fff, 780px 523px #fff, 862px 526px #fff,
+    613px 909px #fff, 266px 781px #fff, 470px 352px #fff;
+  animation: starDrift 60s linear infinite;
+}
+
+#starfield #stars2 {
+  width: 2px;
+  height: 2px;
+  box-shadow:
+    925px 320px #fff, 693px 778px #fff, 16px 711px #fff,
+    171px 563px #fff, 661px 919px #fff, 610px 44px #fff,
+    275px 140px #fff, 208px 802px #fff, 473px 587px #fff,
+    11px 117px #fff, 853px 757px #fff, 149px 937px #fff,
+    353px 428px #fff, 270px 279px #fff, 258px 404px #fff,
+    417px 188px #fff, 286px 561px #fff, 393px 765px #fff,
+    147px 881px #fff, 666px 97px #fff, 425px 278px #fff,
+    806px 156px #fff, 252px 561px #fff, 218px 52px #fff,
+    371px 980px #fff, 171px 745px #fff, 424px 89px #fff,
+    137px 244px #fff, 939px 922px #fff, 137px 80px #fff,
+    757px 50px #fff, 904px 536px #fff, 938px 1px #fff,
+    172px 440px #fff, 72px 475px #fff, 102px 121px #fff,
+    804px 671px #fff, 314px 270px #fff, 440px 341px #fff,
+    216px 511px #fff, 61px 523px #fff, 97px 274px #fff,
+    704px 318px #fff, 52px 872px #fff, 962px 296px #fff,
+    111px 289px #fff, 157px 236px #fff, 347px 451px #fff,
+    820px 286px #fff, 389px 169px #fff, 644px 841px #fff;
+  animation: starDrift 120s linear infinite;
+}
+
+#starfield #stars3 {
+  width: 3px;
+  height: 3px;
+  box-shadow:
+    200px 981px #fff, 731px 521px #fff, 132px 39px #fff,
+    888px 547px #fff, 899px 226px #fff, 887px 580px #fff,
+    548px 92px #fff, 626px 689px #fff, 254px 72px #fff,
+    684px 211px #fff, 672px 267px #fff, 939px 668px #fff,
+    969px 645px #fff, 126px 983px #fff, 457px 568px #fff,
+    476px 876px #fff, 829px 896px #fff, 364px 846px #fff,
+    507px 120px #fff, 936px 948px #fff, 833px 832px #fff,
+    424px 285px #fff, 377px 596px #fff, 432px 153px #fff;
+  animation: starDrift 180s linear infinite;
+}
+
+@keyframes starDrift {
+  from { transform: translateY(0); }
+  to { transform: translateY(-1000px); }
+}
+
+/* Keep page content above the starfield */
+html[data-theme="dark"] .app-shell,
+html[data-theme="dark"] .page,
+html[data-theme="dark"] header,
+html[data-theme="dark"] main {
+  position: relative;
+  z-index: 1;
+}

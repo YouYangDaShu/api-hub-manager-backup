@@ -242,8 +242,17 @@ class NewAPIAdapter(BaseAdapter):
             balance = quota / quota_per_unit
             used = used_quota / quota_per_unit
 
+            aff_count = int(user_data.get("aff_count") or 0)
+            aff_quota_raw = float(user_data.get("aff_quota") or 0)
+            aff_history_raw = float(user_data.get("aff_history_quota") or 0)
+            aff_quota = aff_quota_raw / quota_per_unit
+            aff_history = aff_history_raw / quota_per_unit
+
             return {
                 "balance": round(balance, 4),
+                "aff_count": aff_count,
+                "aff_quota": round(aff_quota, 4),
+                "aff_history_quota": round(aff_history, 4),
                 "used_quota": round(used, 4),
                 "total_quota": round(balance + used, 4),
                 "raw_quota": quota,

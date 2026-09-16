@@ -91,10 +91,24 @@ class Sub2APIAdapter(BaseAdapter):
             return self.access_token
 
     async def get_balance(self) -> dict[str, Any]:
-        """获取用户余额 - 使用 /api/v1/auth/me"""
+        """获取用户余额 - 使用 /api/v1/auth/me 与 /api/v1/user/aff"""
         async with new_async_client(10.0) as client:
             me = await self._request_json(client, f"{self.base_url}/api/v1/auth/me")
             balance = me.get("balance", 0)
+
+            aff_count = 0
+            aff_quota = 0.0
+            aff_history_quota = 0.0
+            try:
+                aff_resp = await client.get(f"{self.base_url}/api/v1/user/aff", headers=self._headers())
+                if aff_resp.status_code == 200:
+                    aff_d = aff_resp.json().get("data") or {}
+                    aff_count = int(aff_d.get("aff_count") or 0)
+                    aff_quota = round(float(aff_d.get("aff_quota") or 0), 4)
+                    aff_history_quota = round(float(aff_d.get("aff_history_quota") or 0), 4)
+            except Exception:
+                pass
+
             return {
                 "balance": round(float(balance), 4),
                 "used_quota": 0,  # Sub2API 的 me 接口不直接返回 used
@@ -103,6 +117,9 @@ class Sub2APIAdapter(BaseAdapter):
                 "display_name": me.get("nickname", me.get("name", "")),
                 "email": me.get("email", ""),
                 "group": me.get("group_name", ""),
+                "aff_count": aff_count,
+                "aff_quota": aff_quota,
+                "aff_history_quota": aff_history_quota,
             }
 
     async def get_groups(self) -> list[dict[str, Any]]:
