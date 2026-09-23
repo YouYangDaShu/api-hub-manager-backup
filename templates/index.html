@@ -487,15 +487,29 @@ html[data-theme="dark"] #page-channel-monitor .seg button.active {
 #page-channel-monitor .shell {
   padding-bottom: 120px !important;
 }
+/* Responsive columns: Desktop 3 columns, Medium 2 columns, Mobile 1 column */
 #page-channel-monitor .group-grid {
   display: grid !important;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   gap: 10px !important;
 }
-@media (max-width: 860px) {
+@media (max-width: 1180px) and (min-width: 680px) {
+  #page-channel-monitor .group-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+@media (max-width: 679px) {
   #page-channel-monitor .group-grid {
     grid-template-columns: 1fr !important;
   }
+}
+#page-channel-monitor .url-link {
+  cursor: pointer !important;
+  text-decoration: underline !important;
+  text-underline-offset: 2px !important;
+}
+#page-channel-monitor .url-link:hover {
+  color: var(--blue, #007aff) !important;
 }
 #page-channel-monitor .card {
   padding: 8px 11px !important;
@@ -850,7 +864,14 @@ async function load() {
 }
 async function toggle(e){try{await get('/channels/'+e.target.dataset.id+'/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:e.target.checked})});toast(e.target.checked?'渠道已启用':'渠道已停用');load()}catch(x){e.target.checked=!e.target.checked;toast('切换失败：'+x.message)}}
 async function testOne(id){try{toast('正在测试…');const d=await get('/test/'+id);toast(d.ok?`正常 · ${d.last_latency_ms} ms`:`失败 · ${d.last_message}`);load()}catch(e){toast('测试失败：'+e.message)}}
-root.addEventListener('mask-channel-urls-change',()=>render());root.addEventListener('mask-channel-names-change',()=>render());root.addEventListener('click',e=>{const toggle=e.target.closest('.group-collapse-toggle');if(!toggle)return;const section=toggle.closest('.group[data-group-name]');const groups=collapsedGroups();const name=section.dataset.groupName;groups.has(name)?groups.delete(name):groups.add(name);saveCollapsedGroups(groups);render()});root.addEventListener('click',e=>{const card=e.target.closest('.card[data-url]');if(!card||e.target.closest('input,select,button,label'))return;window.open(card.dataset.url,'_blank','noopener,noreferrer')});$('#search').oninput=render;root.querySelectorAll('[data-category]').forEach(b=>b.onclick=()=>{activeCategory=b.dataset.category;root.querySelectorAll('[data-category]').forEach(x=>x.classList.toggle('active',x===b));$('#categoryToggleLabel').textContent=(activeCategory==='all'?'全部':root.querySelector(`[data-category="${activeCategory}"]`)?.textContent||activeCategory)+'监控';render()});$('#globalToggle').onchange=async()=>{const enabled=$('#globalToggle').checked;try{if(activeCategory==='all'){await get('/global-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})})}else{await get('/category-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category:activeCategory,enabled})})}toast(enabled?'当前分类监控已开启':'当前分类监控已关闭');load()}catch(x){$('#globalToggle').checked=!enabled;toast('分类监控切换失败：'+x.message)}};$('#testAll').onclick=async()=>{for(const c of rows.filter(x=>x.monitor_enabled&&(activeCategory==='all'||x.category===activeCategory)))await testOne(c.id);load()};$('#showAdd').onclick=()=>$('#addPanel').classList.toggle('hidden');root.querySelectorAll('[data-window]').forEach(b=>b.onclick=()=>{root.querySelectorAll('[data-window]').forEach(x=>x.classList.remove('active'));b.classList.add('active');windowSize=Number(b.dataset.window);render()});let windowSize=24;$('#channelMonitorAddForm').onsubmit=async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));try{await get('/channels',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});toast('渠道已添加');e.target.reset();load()}catch(x){toast('添加失败：'+x.message)}};load();setInterval(load,30000);
+root.addEventListener('mask-channel-urls-change',()=>render());root.addEventListener('mask-channel-names-change',()=>render());root.addEventListener('click',e=>{const toggle=e.target.closest('.group-collapse-toggle');if(!toggle)return;const section=toggle.closest('.group[data-group-name]');const groups=collapsedGroups();const name=section.dataset.groupName;groups.has(name)?groups.delete(name):groups.add(name);saveCollapsedGroups(groups);render()});root.addEventListener('click', e => {
+    // 只有明确点击渠道网址链接时才跳转，点击卡片任意其他区域绝不跳转（防止误触）
+    const link = e.target.closest('.url-link');
+    if (!link) return;
+    const card = link.closest('.card[data-url]');
+    if (!card || !card.dataset.url) return;
+    window.open(card.dataset.url, '_blank', 'noopener,noreferrer');
+});$('#search').oninput=render;root.querySelectorAll('[data-category]').forEach(b=>b.onclick=()=>{activeCategory=b.dataset.category;root.querySelectorAll('[data-category]').forEach(x=>x.classList.toggle('active',x===b));$('#categoryToggleLabel').textContent=(activeCategory==='all'?'全部':root.querySelector(`[data-category="${activeCategory}"]`)?.textContent||activeCategory)+'监控';render()});$('#globalToggle').onchange=async()=>{const enabled=$('#globalToggle').checked;try{if(activeCategory==='all'){await get('/global-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})})}else{await get('/category-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category:activeCategory,enabled})})}toast(enabled?'当前分类监控已开启':'当前分类监控已关闭');load()}catch(x){$('#globalToggle').checked=!enabled;toast('分类监控切换失败：'+x.message)}};$('#testAll').onclick=async()=>{for(const c of rows.filter(x=>x.monitor_enabled&&(activeCategory==='all'||x.category===activeCategory)))await testOne(c.id);load()};$('#showAdd').onclick=()=>$('#addPanel').classList.toggle('hidden');root.querySelectorAll('[data-window]').forEach(b=>b.onclick=()=>{root.querySelectorAll('[data-window]').forEach(x=>x.classList.remove('active'));b.classList.add('active');windowSize=Number(b.dataset.window);render()});let windowSize=24;$('#channelMonitorAddForm').onsubmit=async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));try{await get('/channels',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});toast('渠道已添加');e.target.reset();load()}catch(x){toast('添加失败：'+x.message)}};load();setInterval(load,30000);
 })();</script>
         </section>
         {% endraw %}
