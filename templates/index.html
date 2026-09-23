@@ -121,7 +121,10 @@
         {% raw %}
         <section id="page-channel-monitor" class="page" role="tabpanel" aria-label="渠道可用性">
             <style>
-#page-channel-monitor{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--text);background:radial-gradient(1200px 500px at 10% -10%,rgba(79,70,229,.08),transparent 55%),radial-gradient(900px 400px at 90% 0%,rgba(139,92,246,.07),transparent 50%),var(--bg);--blue:#007aff;--green:#34c759;--red:#ff3b30;--amber:#ff9500;--line:var(--border)}#page-channel-monitor *{box-sizing:border-box}#page-channel-monitor{margin:0}#page-channel-monitor .shell{max-width:1440px;margin:auto;padding:28px 32px}#page-channel-monitor .top{display:flex;justify-content:space-between;align-items:end;margin-bottom:22px}#page-channel-monitor .eyebrow{font-size:12px;color:#7c8798;text-transform:uppercase;letter-spacing:1px}#page-channel-monitor .title{margin:5px 0 0;font-size:28px;letter-spacing:0}#page-channel-monitor .actions{display:flex;gap:10px}#page-channel-monitor .btn{border:1px solid var(--line);background:#fff;border-radius:7px;padding:10px 14px;font-weight:600;cursor:pointer}#page-channel-monitor .btn.primary{background:var(--blue);color:#fff;border-color:var(--blue)}#page-channel-monitor .btn:disabled{opacity:.5;cursor:wait}#page-channel-monitor .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}#page-channel-monitor .hero-controls{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:18px}#page-channel-monitor .seg{display:inline-flex;padding:3px;border:1px solid var(--line);border-radius:9px;background:#eef1f5}#page-channel-monitor .seg button{border:0;background:transparent;border-radius:7px;padding:7px 11px;font-size:12px;cursor:pointer}#page-channel-monitor .seg button.active{background:#fff;box-shadow:0 1px 4px #0001;font-weight:700}#page-channel-monitor .overall{font-size:12px;font-weight:700;padding:7px 11px;border-radius:999px;background:#dcfce7;color:#15803d}#page-channel-monitor .global-switch{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:#5f6b7a}#page-channel-monitor .global-switch input{display:none}#page-channel-monitor .global-switch .slider{position:relative;display:inline-block;width:38px;height:22px;background:#ccd2da;border-radius:20px;cursor:pointer}#page-channel-monitor .global-switch .slider:before{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}#page-channel-monitor .global-switch input:checked+.slider{background:var(--green)}#page-channel-monitor .global-switch input:checked+.slider:before{transform:translateX(16px)}#page-channel-monitor .timeline{display:flex;gap:3px;height:18px;align-items:end;margin-top:12px}#page-channel-monitor .tick{flex:1;min-width:3px;height:10px;border-radius:2px;background:#d7dde5}#page-channel-monitor .tick.ok{height:18px;background:var(--green)}#page-channel-monitor .tick.bad{background:var(--red)}#page-channel-monitor .stat,#page-channel-monitor .panel,#page-channel-monitor .card{background:#fff;border:1px solid var(--line);border-radius:8px}#page-channel-monitor .stat{padding:17px}#page-channel-monitor .stat b{display:block;font-size:25px}#page-channel-monitor .stat span{font-size:12px;color:#7c8798}#page-channel-monitor .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap}#page-channel-monitor .tabs{display:inline-flex;padding:3px;border:1px solid var(--line);border-radius:9px;background:#eef1f5}#page-channel-monitor .tab{border:0;background:transparent;border-radius:7px;padding:8px 12px;font-size:12px;cursor:pointer;white-space:nowrap}#page-channel-monitor .monitor-tab{display:inline-flex;align-items:center;gap:5px;color:#5f6b7a}#page-channel-monitor .monitor-tab input{display:none}#page-channel-monitor .mini-slider{display:inline-block;position:relative;width:30px;height:17px;background:#bfc6d0;border-radius:12px}#page-channel-monitor .mini-slider:before{content:"";position:absolute;width:13px;height:13px;left:2px;top:2px;background:#fff;border-radius:50%;transition:.2s}#page-channel-monitor .monitor-tab input:checked+.mini-slider{background:var(--green)}#page-channel-monitor .monitor-tab input:checked+.mini-slider:before{transform:translateX(13px)}#page-channel-monitor .search{flex:1;border:1px solid var(--line);border-radius:7px;padding:11px 13px;background:#fff}#page-channel-monitor .grid{display:flex;flex-direction:column;gap:20px}#page-channel-monitor .group{background:#fff;border:1px solid var(--line);border-radius:8px;padding:16px}#page-channel-monitor .group-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}#page-channel-monitor .group-title{font-size:16px;font-weight:700}#page-channel-monitor .group-count{font-size:12px;color:#7c8798}#page-channel-monitor .group-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px}#page-channel-monitor .group-off{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}#page-channel-monitor .group-off .compact-off{flex:1 1 320px}#page-channel-monitor .card{background:rgba(255,255,255,.78);backdrop-filter:blur(16px);border:1px solid rgba(220,226,235,.9);border-radius:16px;padding:20px;border-left:0;box-shadow:0 8px 24px rgba(31,48,74,.06);transition:transform .2s,box-shadow .2s}#page-channel-monitor .card:hover{transform:translateY(-2px);box-shadow:0 14px 30px rgba(31,48,74,.11)}#page-channel-monitor .card.ok{border-top:3px solid var(--green)}#page-channel-monitor .card.bad{border-top:3px solid var(--red)}#page-channel-monitor .compact-off{min-height:58px;height:58px;padding:12px 16px;border:1px solid #e3e7ed;border-top:0;background:rgba(248,250,252,.82);opacity:.8;box-shadow:none}#page-channel-monitor .compact-off:hover{transform:none;box-shadow:none}#page-channel-monitor .compact-name,#page-channel-monitor .compact-right{display:flex;align-items:center;gap:10px}#page-channel-monitor .compact-name strong{font-size:14px}#page-channel-monitor .compact-meta,#page-channel-monitor .compact-right>span{font-size:12px;color:#8791a0}#page-channel-monitor .compact-off .dot{width:7px;height:7px;background:#a7b0bc}#page-channel-monitor .card-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}#page-channel-monitor .card-head>div:first-child{min-width:0;padding-right:64px}#page-channel-monitor .name{font-weight:700;font-size:17px;letter-spacing:.1px}#page-channel-monitor .meta{font-size:12px;color:#7c8798;margin-top:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#page-channel-monitor .status-health{font-size:12px;color:#6f7b8c;white-space:nowrap}#page-channel-monitor .body{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0 14px}#page-channel-monitor .metric{padding:12px 13px;border-radius:12px;background:rgba(246,248,251,.9);border:1px solid #edf0f4}#page-channel-monitor .metric label{display:block;color:#8b96a5;font-size:11px;margin-bottom:5px}#page-channel-monitor .metric strong{font-size:17px;color:#182438}#page-channel-monitor .tick.ok{height:20px;background:#2fbf63}#page-channel-monitor .tick.bad{height:10px;background:#e53935}#page-channel-monitor .metric select.model-select{display:block;width:100%;max-width:100%;margin-top:2px;border:0;background:transparent;color:#182438;font:inherit;font-size:15px;font-weight:700;outline:none;appearance:none;padding:0 18px 0 0;background-image:linear-gradient(45deg,transparent 50%,#8791a0 50%),linear-gradient(135deg,#8791a0 50%,transparent 50%);background-position:calc(100% - 9px) 50%,calc(100% - 4px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;cursor:pointer}#page-channel-monitor .metric select.model-select:focus{color:var(--blue)}#page-channel-monitor .group{background:transparent;border:0;padding:0}#page-channel-monitor .group-head{padding:0 2px 8px}#page-channel-monitor .group-title{font-size:15px}#page-channel-monitor .group-count{font-size:12px;color:#8a95a3}#page-channel-monitor .switch{position:relative;width:42px;height:24px}#page-channel-monitor .switch input{opacity:0;width:0;height:0}#page-channel-monitor .slider{position:absolute;inset:0;background:#ccd2da;border-radius:20px;cursor:pointer}#page-channel-monitor .slider:before{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}#page-channel-monitor .switch input:checked+.slider{background:var(--green)}#page-channel-monitor .switch input:checked+.slider:before{transform:translateX(18px)}#page-channel-monitor .panel{padding:18px;margin-top:18px}#page-channel-monitor .panel h2{font-size:16px;margin:0 0 14px}#page-channel-monitor .form{display:grid;grid-template-columns:1fr 1.5fr 1fr 1fr auto;gap:9px}#page-channel-monitor .input{width:100%;border:1px solid var(--line);border-radius:6px;padding:10px 11px}#page-channel-monitor .hint{color:#7c8798;font-size:12px;margin-top:10px}#page-channel-monitor .empty{padding:40px;text-align:center;color:#7c8798}#page-channel-monitor .toast{position:fixed;right:22px;bottom:22px;background:#172033;color:#fff;padding:12px 15px;border-radius:7px;box-shadow:0 8px 24px #0002}#page-channel-monitor .hidden{display:none}@media(max-width:760px){#page-channel-monitor .shell{padding:18px 14px}#page-channel-monitor .top{align-items:start;gap:12px}#page-channel-monitor .actions{flex-direction:column}#page-channel-monitor .summary{grid-template-columns:repeat(2,1fr)}#page-channel-monitor .grid{grid-template-columns:1fr}#page-channel-monitor .form{grid-template-columns:1fr 1fr}#page-channel-monitor .form .wide{grid-column:1/-1}}#page-channel-monitor .url-hidden{display:none!important;color:#9aa3af}#page-channel-monitor .urls-hidden .url-text{display:none!important}#page-channel-monitor .urls-hidden .url-hidden{display:inline!important}#page-channel-monitor .card .api-stamp{position:static!important;display:inline-flex!important;align-items:center!important;width:auto!important;height:26px!important;min-width:0!important;flex:none!important;padding:5px 10px!important;border-radius:6px!important;border:1px solid!important;font-size:12px!important;font-weight:700!important;line-height:1!important;white-space:nowrap!important;transform:none!important}#page-channel-monitor .card .status{display:flex!important;align-items:center!important;gap:7px!important;padding:0!important;min-height:0!important}#page-channel-monitor .card .status-health{display:none!important}#page-channel-monitor .timeline{display:flex!important;flex-flow:row nowrap!important;align-items:flex-end!important;width:100%!important;height:22px!important;gap:2px!important;margin-top:12px!important;overflow:hidden!important}#page-channel-monitor .timeline .tick{display:block!important;flex:1 1 0!important;width:auto!important;min-width:0!important;height:3px!important;margin:0!important;border-radius:3px!important;background:#dfe4eb!important}#page-channel-monitor .timeline .tick.ok{height:20px!important;background:#2fbf63!important}#page-channel-monitor .timeline .tick.degraded{height:13px!important;background:#f59e0b!important}#page-channel-monitor .timeline .tick.bad{height:7px!important;background:#e53935!important}#page-channel-monitor .stat{position:relative;overflow:hidden;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);transition:transform .15s,box-shadow .15s,border-color .15s}#page-channel-monitor .stat::after{content:"";position:absolute;inset:auto -20% -40% auto;width:120px;height:120px;border-radius:50%;background:var(--primary-soft);pointer-events:none}#page-channel-monitor .stat:hover{transform:translateY(-1px);box-shadow:var(--shadow);border-color:color-mix(in srgb,var(--primary) 28%,var(--border))}#page-channel-monitor .stat b,#page-channel-monitor .stat span{position:relative;z-index:1}
+#page-channel-monitor{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--text);background:radial-gradient(1200px 500px at 10% -10%,rgba(79,70,229,.08),transparent 55%),radial-gradient(900px 400px at 90% 0%,rgba(139,92,246,.07),transparent 50%),var(--bg);--blue:#007aff;--green:#34c759;--red:#ff3b30;--amber:#ff9500;--line:var(--border)}#page-channel-monitor *{box-sizing:border-box}#page-channel-monitor{margin:0}#page-channel-monitor .shell{max-width:1440px;margin:auto;padding:28px 32px}#page-channel-monitor .top{display:flex;justify-content:space-between;align-items:end;margin-bottom:22px}#page-channel-monitor .eyebrow{font-size:12px;color:#7c8798;text-transform:uppercase;letter-spacing:1px}#page-channel-monitor .title{margin:5px 0 0;font-size:28px;letter-spacing:0}#page-channel-monitor .actions{display:flex;gap:10px}#page-channel-monitor .btn{border:1px solid var(--line);background:#fff;border-radius:7px;padding:10px 14px;font-weight:600;cursor:pointer}#page-channel-monitor .btn.primary{background:var(--blue);color:#fff;border-color:var(--blue)}#page-channel-monitor .btn:disabled{opacity:.5;cursor:wait}#page-channel-monitor .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}#page-channel-monitor .hero-controls{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:18px}#page-channel-monitor .seg{display:inline-flex;padding:3px;border:1px solid var(--line);border-radius:9px;background:#eef1f5}#page-channel-monitor .seg button{border:0;background:transparent;border-radius:7px;padding:7px 11px;font-size:12px;cursor:pointer}#page-channel-monitor .seg button.active{background:#fff;box-shadow:0 1px 4px #0001;font-weight:700}#page-channel-monitor .overall{font-size:12px;font-weight:700;padding:7px 11px;border-radius:999px;background:#dcfce7;color:#15803d}#page-channel-monitor .global-switch{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:#5f6b7a}#page-channel-monitor .global-switch input{display:none}#page-channel-monitor .global-switch .slider{position:relative;display:inline-block;width:38px;height:22px;background:#ccd2da;border-radius:20px;cursor:pointer}#page-channel-monitor .global-switch .slider:before{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}#page-channel-monitor .global-switch input:checked+.slider{background:var(--green)}#page-channel-monitor .global-switch input:checked+.slider:before{transform:translateX(16px)}#page-channel-monitor .timeline{display:flex;gap:3px;height:18px;align-items:end;margin-top:12px}#page-channel-monitor .tick{flex:1;min-width:3px;height:10px;border-radius:2px;background:#d7dde5}#page-channel-monitor .tick.ok{height:18px;background:var(--green)}#page-channel-monitor .tick.bad{background:var(--red)}#page-channel-monitor .stat,#page-channel-monitor .panel,#page-channel-monitor .card{background:#fff;border:1px solid var(--line);border-radius:8px}#page-channel-monitor .stat{padding:17px}#page-channel-monitor .stat b{display:block;font-size:25px}#page-channel-monitor .stat span{font-size:12px;color:#7c8798}#page-channel-monitor .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap}#page-channel-monitor .tabs{display:inline-flex;padding:3px;border:1px solid var(--line);border-radius:9px;background:#eef1f5}#page-channel-monitor .tab{border:0;background:transparent;border-radius:7px;padding:8px 12px;font-size:12px;cursor:pointer;white-space:nowrap}#page-channel-monitor .monitor-tab{display:inline-flex;align-items:center;gap:5px;color:#5f6b7a}#page-channel-monitor .monitor-tab input{display:none}#page-channel-monitor .mini-slider{display:inline-block;position:relative;width:30px;height:17px;background:#bfc6d0;border-radius:12px}#page-channel-monitor .mini-slider:before{content:"";position:absolute;width:13px;height:13px;left:2px;top:2px;background:#fff;border-radius:50%;transition:.2s}#page-channel-monitor .monitor-tab input:checked+.mini-slider{background:var(--green)}#page-channel-monitor .monitor-tab input:checked+.mini-slider:before{transform:translateX(13px)}#page-channel-monitor .search{flex:1;border:1px solid var(--line);border-radius:7px;padding:11px 13px;background:#fff}#page-channel-monitor .grid{display:flex;flex-direction:column;gap:20px}#page-channel-monitor .group{background:#fff;border:1px solid var(--line);border-radius:8px;padding:16px}#page-channel-monitor .group-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}#page-channel-monitor .group-title{font-size:16px;font-weight:700}#page-channel-monitor .group-count{font-size:12px;color:#7c8798}#page-channel-monitor .group-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px}#page-channel-monitor .group-off{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}#page-channel-monitor .group-off .compact-off{flex:1 1 320px}#page-channel-monitor .card{background:rgba(255,255,255,.78);backdrop-filter:blur(16px);border:1px solid rgba(220,226,235,.9);border-radius:16px;padding:20px;border-left:0;box-shadow:0 8px 24px rgba(31,48,74,.06);transition:transform .2s,box-shadow .2s}#page-channel-monitor .card:hover{transform:translateY(-2px);box-shadow:0 14px 30px rgba(31,48,74,.11)}#page-channel-monitor .card.ok{border-top:3px solid var(--green)}#page-channel-monitor .card.bad{border-top:3px solid var(--red)}#page-channel-monitor .compact-off{min-height:58px;height:58px;padding:12px 16px;border:1px solid #e3e7ed;border-top:0;background:rgba(248,250,252,.82);opacity:.8;box-shadow:none}#page-channel-monitor .compact-off:hover{transform:none;box-shadow:none}#page-channel-monitor .compact-name,#page-channel-monitor .compact-right{display:flex;align-items:center;gap:10px}#page-channel-monitor .compact-name strong{font-size:14px}#page-channel-monitor .compact-meta,#page-channel-monitor .compact-right>span{font-size:12px;color:#8791a0}#page-channel-monitor .compact-off .dot{width:7px;height:7px;background:#a7b0bc}#page-channel-monitor .card-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}#page-channel-monitor .card-head>div:first-child{min-width:0;padding-right:64px}#page-channel-monitor .name{font-weight:700;font-size:17px;letter-spacing:.1px}#page-channel-monitor .meta{font-size:12px;color:#7c8798;margin-top:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#page-channel-monitor .status-health{font-size:12px;color:#6f7b8c;white-space:nowrap}#page-channel-monitor .body{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0 14px}
+@media(max-width:1050px){#page-channel-monitor .body{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){#page-channel-monitor .body{grid-template-columns:1fr}}
+#page-channel-monitor .group-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:16px}#page-channel-monitor .metric{padding:12px 13px;border-radius:12px;background:rgba(246,248,251,.9);border:1px solid #edf0f4}#page-channel-monitor .metric label{display:block;color:#8b96a5;font-size:11px;margin-bottom:5px}#page-channel-monitor .metric strong{font-size:17px;color:#182438}#page-channel-monitor .tick.ok{height:20px;background:#2fbf63}#page-channel-monitor .tick.bad{height:10px;background:#e53935}#page-channel-monitor .metric select.model-select{display:block;width:100%;max-width:100%;margin-top:2px;border:0;background:transparent;color:#182438;font:inherit;font-size:15px;font-weight:700;outline:none;appearance:none;padding:0 18px 0 0;background-image:linear-gradient(45deg,transparent 50%,#8791a0 50%),linear-gradient(135deg,#8791a0 50%,transparent 50%);background-position:calc(100% - 9px) 50%,calc(100% - 4px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;cursor:pointer}#page-channel-monitor .metric select.model-select:focus{color:var(--blue)}#page-channel-monitor .group{background:transparent;border:0;padding:0}#page-channel-monitor .group-head{padding:0 2px 8px}#page-channel-monitor .group-title{font-size:15px}#page-channel-monitor .group-count{font-size:12px;color:#8a95a3}#page-channel-monitor .switch{position:relative;width:42px;height:24px}#page-channel-monitor .switch input{opacity:0;width:0;height:0}#page-channel-monitor .slider{position:absolute;inset:0;background:#ccd2da;border-radius:20px;cursor:pointer}#page-channel-monitor .slider:before{content:"";position:absolute;width:18px;height:18px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}#page-channel-monitor .switch input:checked+.slider{background:var(--green)}#page-channel-monitor .switch input:checked+.slider:before{transform:translateX(18px)}#page-channel-monitor .panel{padding:18px;margin-top:18px}#page-channel-monitor .panel h2{font-size:16px;margin:0 0 14px}#page-channel-monitor .form{display:grid;grid-template-columns:1fr 1.5fr 1fr 1fr auto;gap:9px}#page-channel-monitor .input{width:100%;border:1px solid var(--line);border-radius:6px;padding:10px 11px}#page-channel-monitor .hint{color:#7c8798;font-size:12px;margin-top:10px}#page-channel-monitor .empty{padding:40px;text-align:center;color:#7c8798}#page-channel-monitor .toast{position:fixed;right:22px;bottom:22px;background:#172033;color:#fff;padding:12px 15px;border-radius:7px;box-shadow:0 8px 24px #0002}#page-channel-monitor .hidden{display:none}@media(max-width:760px){#page-channel-monitor .shell{padding:18px 14px}#page-channel-monitor .top{align-items:start;gap:12px}#page-channel-monitor .actions{flex-direction:column}#page-channel-monitor .summary{grid-template-columns:repeat(2,1fr)}#page-channel-monitor .grid{grid-template-columns:1fr}#page-channel-monitor .form{grid-template-columns:1fr 1fr}#page-channel-monitor .form .wide{grid-column:1/-1}}#page-channel-monitor .url-hidden{display:none!important;color:#9aa3af}#page-channel-monitor .urls-hidden .url-text{display:none!important}#page-channel-monitor .urls-hidden .url-hidden{display:inline!important}#page-channel-monitor .card .api-stamp{position:static!important;display:inline-flex!important;align-items:center!important;width:auto!important;height:26px!important;min-width:0!important;flex:none!important;padding:5px 10px!important;border-radius:6px!important;border:1px solid!important;font-size:12px!important;font-weight:700!important;line-height:1!important;white-space:nowrap!important;transform:none!important}#page-channel-monitor .card .status{display:flex!important;align-items:center!important;gap:7px!important;padding:0!important;min-height:0!important}#page-channel-monitor .card .status-health{display:none!important}#page-channel-monitor .timeline{display:flex!important;flex-flow:row nowrap!important;align-items:flex-end!important;width:100%!important;height:22px!important;gap:2px!important;margin-top:12px!important;overflow:hidden!important}#page-channel-monitor .timeline .tick{display:block!important;flex:1 1 0!important;width:auto!important;min-width:0!important;height:3px!important;margin:0!important;border-radius:3px!important;background:#dfe4eb!important}#page-channel-monitor .timeline .tick.ok{height:20px!important;background:#2fbf63!important}#page-channel-monitor .timeline .tick.degraded{height:13px!important;background:#f59e0b!important}#page-channel-monitor .timeline .tick.bad{height:7px!important;background:#e53935!important}#page-channel-monitor .stat{position:relative;overflow:hidden;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);transition:transform .15s,box-shadow .15s,border-color .15s}#page-channel-monitor .stat::after{content:"";position:absolute;inset:auto -20% -40% auto;width:120px;height:120px;border-radius:50%;background:var(--primary-soft);pointer-events:none}#page-channel-monitor .stat:hover{transform:translateY(-1px);box-shadow:var(--shadow);border-color:color-mix(in srgb,var(--primary) 28%,var(--border))}#page-channel-monitor .stat b,#page-channel-monitor .stat span{position:relative;z-index:1}
             
 /* Channel availability follows the dashboard visual system. */
 #page-channel-monitor {
@@ -479,17 +482,58 @@ html[data-theme="dark"] #page-channel-monitor .seg button.active {
 #page-channel-monitor .group.collapsed .group-head{margin-bottom:0;padding-bottom:0}
 #page-channel-monitor .group-collapse-toggle:focus-visible{outline:2px solid var(--primary);outline-offset:5px;border-radius:6px}
 @media(max-width:760px){#page-channel-monitor .group-head-meta{gap:7px}#page-channel-monitor .group-count{max-width:170px;text-align:right}}
+
+/* User requested: group-grid max 2 columns (not 3), body strictly 2 columns (1fr 1fr) */
+#page-channel-monitor .shell {
+  padding-bottom: 120px !important;
+}
+#page-channel-monitor .group-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 16px !important;
+}
+@media (max-width: 860px) {
+  #page-channel-monitor .group-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+#page-channel-monitor .body {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 10px !important;
+  margin: 18px 0 14px !important;
+}
+#page-channel-monitor .metric {
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
 </style>
 <main class="shell">
 <header class="top"><div><div class="eyebrow">New API / Operations</div><h1 class="title">渠道可用性</h1></div><div class="hero-controls"><div class="seg"><button class="active" data-window="24">24小时</button><button data-window="168">7天</button></div><span class="overall" id="overall">检测中</span><button class="btn" id="refresh">刷新</button><button class="btn" id="testAll">测试全部</button></div></header>
 <section class="summary"><div class="stat"><b id="total">-</b><span>渠道总数</span></div><div class="stat"><b id="enabled">-</b><span>正在检测</span></div><div class="stat"><b id="healthy">-</b><span>当前可用</span></div><div class="stat"><b id="avg">-</b><span>平均响应</span></div></section>
-<div class="toolbar"><div class="tabs" id="tabs"><button class="tab active" data-category="all">全部</button><button class="tab" data-category="gpt">GPT</button><button class="tab" data-category="claude">Claude</button><button class="tab" data-category="grok">Grok</button><button class="tab" data-category="other">国模/其他</button><label class="tab monitor-tab"><span id="categoryToggleLabel">全部监控</span><input id="globalToggle" type="checkbox"><i class="mini-slider"></i></label></div><input class="search" id="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="搜索渠道或分组"><button class="btn" id="showAdd">添加渠道</button></div>
+<div class="toolbar"><div class="tabs" id="tabs"><button class="tab active" data-category="all">全部</button><button class="tab" data-category="gpt">GPT</button><button class="tab" data-category="claude">Claude</button><button class="tab" data-category="grok">Grok</button><button class="tab" data-category="other">国模/其他</button><label class="tab monitor-tab"><span id="categoryToggleLabel">全部监控</span><input id="globalToggle" type="checkbox"><i class="mini-slider"></i></label></div><div class="batch-iq-ctrl" style="display:inline-flex;align-items:center;gap:6px;background:rgba(0,122,255,0.06);border:1px solid rgba(0,122,255,0.18);border-radius:7px;padding:3px 8px;">
+    <span style="font-size:11.5px;font-weight:600;color:var(--blue,#007aff);white-space:nowrap;">⚡ 一键改 GPT 智商模型:</span>
+    <select id="batchGptIqModelSelect" style="padding:3px 6px;font-size:11.5px;border:1px solid var(--line);border-radius:5px;background:#fff;color:var(--text);outline:none;cursor:pointer;">
+        <option value="gpt-5.6-sol" selected>gpt-5.6-sol (推荐)</option>
+        <option value="gpt-5.5">gpt-5.5</option>
+        <option value="gpt-5.6-terra">gpt-5.6-terra</option>
+        <option value="gpt-6-astra">gpt-6-astra</option>
+        <option value="codex-auto-review">codex-auto-review</option>
+        <option value="__custom__">自定义输入模型…</option>
+    </select>
+    <button class="btn primary" type="button" id="btnBatchGptIqModel" style="padding:3px 8px;font-size:11.5px;white-space:nowrap;" onclick="window.batchApplyGptModel()">应用</button>
+</div>
+<input class="search" id="search" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="搜索渠道或分组"><button class="btn" id="showAdd">添加渠道</button></div>
 <section id="grid" class="grid"><div class="empty">正在读取 New API 渠道…</div></section>
 <section class="panel hidden" id="addPanel"><h2>添加 New API 渠道</h2><form class="form" id="channelMonitorAddForm"><input class="input" name="name" placeholder="渠道名称" required><input class="input wide" name="base_url" placeholder="上游 Base URL，例如 https://api.example.com" required><input class="input" name="key" placeholder="渠道 Key" required><input class="input" name="models" placeholder="模型，逗号分隔"><button class="btn primary">保存</button></form><div class="hint">保存会直接写入 New API 生产 SQLite；只添加渠道，不自动启用测试流量。</div></section>
 </main><div id="toast" class="toast hidden"></div>
 
             <script>(function(){
 const root=document.querySelector('#page-channel-monitor');const $=s=>root.querySelector(s);const api='api/channel-monitor';let rows=[];let activeCategory='all';const token=()=>'';
+let _iqStateData = {};
+let _iqChannelModels = {};
+let _todayUsageChannels = {};
+window.reloadChannelMonitor = () => load();
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.remove('hidden');setTimeout(()=>e.classList.add('hidden'),2600)}
 async function get(path,opt={}){opt.headers={...(opt.headers||{}),"X-Channel-Monitor-Token":token()};const r=await fetch(api+path,opt);const d=await r.json();if(!r.ok)throw Error(d.error||r.status);return d}
 function esc(s){return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
@@ -502,10 +546,217 @@ function collapsedGroups(){try{return new Set(JSON.parse(localStorage.getItem(CO
 function saveCollapsedGroups(groups){localStorage.setItem(COLLAPSED_GROUPS_KEY,JSON.stringify([...groups]))}
 function maskMonitorUrl(url){const value=String(url||'');const hidden=localStorage.getItem(MASK_CHANNEL_URLS_KEY)==='1'||localStorage.getItem('mask_dashboard_urls')==='1';if(!hidden)return esc(value);try{const parsed=new URL(value);return esc(`${parsed.protocol}//${'*'.repeat(Math.max(8,parsed.host.length))}${parsed.pathname==='/'?'':'/*'}`)}catch(_){return esc('********')}}
 function timeline(c, windowSize=HISTORY_WINDOW){const h=c.history||[];const expand=windowSize===120&&h.length<120;const recent=expand?h.slice(-60).flatMap(x=>[x,x]):h.slice(-windowSize);const padding=Math.max(0,windowSize-recent.length);return `<div class="timeline" data-history-window="${windowSize}">${Array.from({length:windowSize},(_,i)=>{const x=i<padding?null:recent[i-padding];const state=x?(x.ok?(Number(x.latency_ms||0)>=6000?'degraded':'ok'):'bad'):'';return `<i class="tick ${state}" title="${x?esc(x.at)+(state==='degraded'?' · 响应较慢':''):'暂无样本'}"></i>`}).join('')}</div>`}
+function iqTimeline(c, windowSize=HISTORY_WINDOW){
+    const cidStr = String(c.id);
+    const iqConf = (_iqStateData.channels && _iqStateData.channels[cidStr]) || {};
+    const isIqExplicitlyDisabled = Boolean(iqConf && iqConf.enabled === false);
+    const off = isMonitorOff(c);
+    const isIqActive = !off && !isIqExplicitlyDisabled;
+
+    if (!isIqActive) {
+        const disabledTip = off ? '渠道监控已关 · 智商检测跟随停用' : '已单独关闭智商检测（色块留白）';
+        return `<div class="timeline" data-history-window="${windowSize}" title="${disabledTip}">${Array.from({length:windowSize},()=>`<i class="tick" style="opacity:0.35;" title="${disabledTip}"></i>`).join('')}</div>`;
+    }
+
+    const allHist = iqConf.history || [];
+    const recent = allHist.slice(-windowSize);
+    const padding = Math.max(0, windowSize - recent.length);
+
+    return `<div class="timeline" data-history-window="${windowSize}">${Array.from({length:windowSize}, (_, i) => {
+        if (i < padding) {
+            return `<i class="tick" title="待检测"></i>`;
+        }
+        const histIdx = (allHist.length - recent.length) + (i - padding);
+        const item = recent[i - padding];
+        const status = item.status || 'bad';
+        let stateClass = 'bad';
+        if (status === 'green') stateClass = 'ok';
+        else if (status === 'yellow') stateClass = 'degraded';
+
+        const tip = `${item.at || ''} · 答案: ${item.answer != null ? item.answer : '无'} · 耗时: ${item.duration || 0}s (${status === 'green' ? '21 满分' : (status === 'yellow' ? '29 巧合' : '错误')})`;
+        return `<i class="tick ${stateClass}" style="cursor:pointer;" title="${esc(tip)}" onclick="window.showIqDetail(${c.id}, ${histIdx})"></i>`;
+    }).join('')}</div>`;
+}
 const isMonitorOff=c=>!c.monitor_enabled||!c.category_enabled||c.monitor_global_enabled===false;
-function card(c, historyWindow=HISTORY_WINDOW){const off=isMonitorOff(c);if(off)return `<article class="card compact-off" data-url="${esc(c.base_url)}"><div class="compact-name"><span class="dot"></span><strong>${maskMonitorName(c.name)}</strong><span class="compact-meta">#${c.id} · 优先级 ${c.priority} · ${esc(c.monitor_model)}</span></div><div class="compact-right"><span>监控关闭</span><label class="switch"><input class="monitor-toggle" data-id="${c.id}" type="checkbox"><span class="slider"></span></label></div></article>`;const effective=true;const health=c.last_ok===true?'正常':c.last_ok===false?'异常':'待检测';const rate=c.availability_24h==null?'-':c.availability_24h+'%';const chosen=c.monitor_model||((c.models||[]).includes('gpt-5.6-terra')?'gpt-5.6-terra':((c.models||[])[0]||''));const opts=(c.models||[]).map(m=>`<option value="${esc(m)}" ${m===chosen?'selected':''}>${esc(m)}</option>`).join('');return `<article class="card ${off?'off':c.last_ok===false?'bad':'ok'}" data-url="${esc(c.base_url)}"><div class="card-head"><div><div class="name">${maskMonitorName(c.name)}</div><div class="meta">#${c.id} · 优先级 ${c.priority} · <span class="url-text url-link">${maskMonitorUrl(c.base_url)}</span><span class="url-hidden"> · 网址已隐藏</span></div></div><div class="status"><span class="api-stamp ${c.channel_enabled?'on':'off'}">New API ${c.channel_enabled?'启用':'停用'}</span><label class="switch"><input class="monitor-toggle" data-id="${c.id}" type="checkbox" ${c.monitor_enabled?'checked':''}><span class="slider"></span></label></div></div><div class="body"><div class="metric"><label>监控模型</label><select class="model-select" data-id="${c.id}">${opts}<option value="__custom__">手动填写…</option></select></div><div class="metric"><label>24小时可用性</label><strong>${rate}</strong></div><div class="metric"><label>最近延迟</label><strong>${c.last_latency_ms?c.last_latency_ms+' ms':'-'}</strong></div><div class="metric"><label>连续失败</label><strong>${c.consecutive_failures||0} 次</strong></div></div>${timeline(c, historyWindow)}</article>`}
+function card(c, historyWindow=HISTORY_WINDOW){
+    const off = isMonitorOff(c);
+    if(off) {
+        return `<article class="card compact-off" data-url="${esc(c.base_url)}">
+            <div class="compact-name">
+                <span class="dot"></span>
+                <strong>${maskMonitorName(c.name)}</strong>
+                <span class="compact-meta">#${c.id} · 优先级 ${c.priority} · ${esc(c.monitor_model)}</span>
+            </div>
+            <div class="compact-right">
+                <span>监控关闭</span>
+                <label class="switch"><input class="monitor-toggle" data-id="${c.id}" type="checkbox"><span class="slider"></span></label>
+            </div>
+        </article>`;
+    }
+
+    const health = c.last_ok === true ? '正常' : c.last_ok === false ? '异常' : '待检测';
+    const rate = c.availability_24h == null ? '-' : c.availability_24h + '%';
+    const chosen = c.monitor_model || ((c.models || []).includes('gpt-5.6-terra') ? 'gpt-5.6-terra' : ((c.models || [])[0] || ''));
+    const opts = (c.models || []).map(m => `<option value="${esc(m)}" ${m === chosen ? 'selected' : ''}>${esc(m)}</option>`).join('');
+
+    // --- 智商检测状态与模型 ---
+    const cidStr = String(c.id);
+    const iqConf = (_iqStateData.channels && _iqStateData.channels[cidStr]) || {};
+    const isIqExplicitlyDisabled = Boolean(iqConf && iqConf.enabled === false);
+    const isIqActive = !off && !isIqExplicitlyDisabled;
+
+    const availableModels = _iqChannelModels[cidStr] || (c.models || []);
+    const selIqModel = iqConf.selected_model || (availableModels.includes('gpt-5.6-sol') ? 'gpt-5.6-sol' : (availableModels[0] || 'gpt-5.6-sol'));
+    const iqOpts = availableModels.map(m => `<option value="${esc(m)}" ${m === selIqModel ? 'selected' : ''}>${esc(m)}</option>`).join('');
+
+    let iqStatusBadge = '';
+    let iqSwitchChecked = '';
+    let iqSwitchDisabled = '';
+    let iqSwitchTitle = '';
+
+    if (off) {
+        iqStatusBadge = `<span style="font-size:10.5px;color:var(--muted);background:rgba(120,120,128,0.12);padding:1px 5px;border-radius:4px;white-space:nowrap;">跟随停用</span>`;
+        iqSwitchChecked = '';
+        iqSwitchDisabled = 'disabled';
+        iqSwitchTitle = '可用性监控已关，智商检测跟随停用';
+    } else if (isIqExplicitlyDisabled) {
+        iqStatusBadge = `<span style="font-size:10.5px;color:#8e8e93;background:rgba(120,120,128,0.12);padding:1px 5px;border-radius:4px;white-space:nowrap;">智商已关</span>`;
+        iqSwitchChecked = '';
+        iqSwitchTitle = '已单独关闭智商检测';
+    } else {
+        iqStatusBadge = `<span style="font-size:10.5px;color:#34c759;background:rgba(52,199,89,0.12);padding:1px 5px;border-radius:4px;font-weight:600;white-space:nowrap;">监控中</span>`;
+        iqSwitchChecked = 'checked';
+        iqSwitchTitle = '智商检测正常运行中，点击可关闭';
+    }
+
+    // --- 今日缓存命中率 ---
+    const usageData = _todayUsageChannels[cidStr];
+    let cacheRateDisplay = '-';
+    let cacheBarHtml = '';
+    if (usageData && usageData.prompt_tokens_m > 0) {
+        const crate = usageData.cache_rate || 0;
+        cacheRateDisplay = crate.toFixed(1) + '%';
+        let barColor = '#8e8e93';
+        if (crate >= 80) barColor = '#34c759';
+        else if (crate >= 50) barColor = '#007aff';
+        cacheBarHtml = `<div style="width:40px;height:5px;background:rgba(120,120,128,0.15);border-radius:3px;overflow:hidden;flex-shrink:0;" title="今日输入: ${usageData.prompt_tokens_m.toFixed(2)}M, 缓存命中: ${(usageData.cache_tokens_m||0).toFixed(2)}M">
+            <div style="width:${Math.min(100, Math.max(0, crate))}%;height:100%;background:${barColor};border-radius:3px;"></div>
+        </div>`;
+    }
+
+    // --- 智商检测最新结果摘要 ---
+    let iqStatusSummary = '';
+    if (isIqActive) {
+        const allHist = iqConf.history || [];
+        const lastItem = allHist[allHist.length - 1];
+        if (lastItem) {
+            iqStatusSummary = lastItem.status === 'green' ? '🟢 21 满分' : (lastItem.status === 'yellow' ? '🟡 29 巧合' : '🔴 异常');
+        }
+    } else {
+        iqStatusSummary = isIqExplicitlyDisabled ? '智商已关' : '跟随停用';
+    }
+
+    return `<article class="card ${off ? 'off' : c.last_ok === false ? 'bad' : 'ok'}" data-url="${esc(c.base_url)}">
+        <div class="card-head">
+            <div>
+                <div class="name">${maskMonitorName(c.name)}</div>
+                <div class="meta">#${c.id} · 优先级 ${c.priority} · <span class="url-text url-link">${maskMonitorUrl(c.base_url)}</span><span class="url-hidden"> · 网址已隐藏</span></div>
+            </div>
+            <div class="status">
+                <span class="api-stamp ${c.channel_enabled ? 'on' : 'off'}">New API ${c.channel_enabled ? '启用' : '停用'}</span>
+                <label class="switch"><input class="monitor-toggle" data-id="${c.id}" type="checkbox" ${c.monitor_enabled ? 'checked' : ''}><span class="slider"></span></label>
+            </div>
+        </div>
+        <div class="body">
+            <!-- Row 1: 监控模型 | 24小时可用性 -->
+            <div class="metric">
+                <label>监控模型</label>
+                <select class="model-select" data-id="${c.id}">${opts}<option value="__custom__">手动填写…</option></select>
+            </div>
+            <div class="metric">
+                <label>24小时可用性</label>
+                <strong>${rate}</strong>
+            </div>
+
+            <!-- Row 2: 智商检测模型 | 今日缓存率 -->
+            <div class="metric">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                    <label style="margin:0;color:#8b96a5;font-size:11px;font-weight:600;white-space:nowrap;">智商检测</label>
+                    <label class="iq-switch" style="width:26px;height:14px;margin:0;flex-shrink:0;" title="${iqSwitchTitle}">
+                        <input type="checkbox" ${iqSwitchChecked} ${iqSwitchDisabled} onchange="window.onIqToggleChange(${c.id}, this.checked)">
+                        <span class="iq-slider" style="border-radius:14px;"></span>
+                    </label>
+                </div>
+                <div style="display:flex;align-items:center;gap:4px;margin-top:2px;">
+                    <select class="model-select iq-model-select" data-cid="${c.id}" onchange="window.onIqModelChange(${c.id}, this.value)" style="flex:1;min-width:0;padding:2px 14px 2px 4px;font-size:12.5px;font-weight:700;">
+                        ${iqOpts || `<option value="${esc(selIqModel)}">${esc(selIqModel)}</option>`}
+                    </select>
+                    <button class="btn btn-ghost" id="btnIqTest_${c.id}" style="padding:2px 8px;font-size:11px;min-width:28px;height:24px;line-height:1;border:1px solid var(--line);background:#fff;border-radius:5px;cursor:pointer;flex-shrink:0;" title="立即手动测试一次智商" onclick="window.runIqTestNow(${c.id}, this)">测</button>
+                </div>
+            </div>
+            <div class="metric">
+                <label>今日缓存率</label>
+                <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+                    <strong style="font-size:17px;color:#182438;">${cacheRateDisplay}</strong>
+                    ${cacheBarHtml}
+                </div>
+            </div>
+
+            <!-- Row 3: 最近延迟 | 连续失败 -->
+            <div class="metric">
+                <label>最近延迟</label>
+                <strong>${c.last_latency_ms ? c.last_latency_ms + ' ms' : '-'}</strong>
+            </div>
+            <div class="metric">
+                <label>连续失败</label>
+                <strong>${c.consecutive_failures || 0} 次</strong>
+            </div>
+        </div>
+        <div class="timelines-wrapper" style="margin-top:14px;display:flex;flex-direction:column;gap:10px;">
+            <div>
+                <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#7c8798;margin-bottom:4px;">
+                    <span>可用性探测 (24h)</span>
+                    <span style="font-size:10px;">${c.last_latency_ms ? c.last_latency_ms + ' ms' : ''}</span>
+                </div>
+                ${timeline(c, historyWindow)}
+            </div>
+            <div>
+                <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#7c8798;margin-bottom:4px;">
+                    <span>整点智商检测</span>
+                    <span style="font-size:10px;font-weight:600;">${iqStatusSummary}</span>
+                </div>
+                ${iqTimeline(c, historyWindow)}
+            </div>
+        </div>
+    </article>`;
+}
 function render(){const q=$('#search').value.toLowerCase();const list=rows.filter(c=>(activeCategory==='all'||c.category===activeCategory)&&(c.name+' '+c.base_url+' '+c.group+' '+c.monitor_model+' '+c.models.join(' ')).toLowerCase().includes(q));const groups={};list.forEach(c=>{const g=c.group||'未分组';(groups[g]??=[]).push(c)});Object.values(groups).forEach(items=>items.sort((a,b)=>(Number(b.priority||0)-Number(a.priority||0))||a.name.localeCompare(b.name,'zh')));const orderedGroups=Object.entries(groups);const collapsed=collapsedGroups();const groupHtml=orderedGroups.map(([g,items])=>{const activeItems=items.filter(x=>!isMonitorOff(x));const offItems=items.filter(isMonitorOff);const historyWindow=activeItems.length===1?120:60;const isCollapsed=collapsed.has(g);return `<section class="group ${isCollapsed?'collapsed':''}" data-group-name="${esc(g)}"><button class="group-head group-collapse-toggle" type="button" aria-expanded="${!isCollapsed}"><div class="group-title">${esc(g)}</div><div class="group-head-meta"><span class="group-count">${items.length} 个渠道 · ${items.filter(x=>x.last_ok===true).length} 个当前可用</span><span class="group-chevron">${isCollapsed?'展开':'收起'}</span></div></button><div class="group-content"><div class="group-grid">${activeItems.map(c=>card(c,historyWindow)).join('')}</div>${offItems.length?`<div class="group-off">${offItems.map(card).join('')}</div>`:''}</div></section>`}).join('');$('#grid').innerHTML=groupHtml||'<div class="empty">没有匹配的渠道</div>';const effectiveRows=rows.filter(x=>x.monitor_enabled&&x.category_enabled&&x.monitor_global_enabled!==false);$('#total').textContent=rows.length;$('#enabled').textContent=effectiveRows.length;$('#healthy').textContent=effectiveRows.filter(x=>x.last_ok===true).length;const lat=effectiveRows.filter(x=>x.last_latency_ms>0).map(x=>x.last_latency_ms);$('#avg').textContent=lat.length?Math.round(lat.reduce((a,b)=>a+b,0)/lat.length)+' ms':'-';const bad=rows.filter(x=>x.enabled&&x.last_ok===false).length;$('#overall').textContent=bad?'部分异常':'运行正常';$('#overall').classList.toggle('warn',!!bad);root.querySelectorAll('.monitor-toggle').forEach(e=>e.onchange=async()=>{try{await get('/channels/'+e.dataset.id+'/monitor-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:e.checked})});toast(e.checked?'监控已开启':'监控已关闭');load()}catch(x){e.checked=!e.checked;toast('监控切换失败：'+x.message)}});root.querySelectorAll('.model-select').forEach(e=>e.onchange=async()=>{let model=e.value;if(model==='__custom__'){model=prompt('输入要检测的模型名');if(!model){load();return}}try{await get('/channels/'+e.dataset.id+'/monitor-model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model})});toast('测试模型已保存');load()}catch(x){toast('模型保存失败：'+x.message)}});$('#globalToggle').checked=rows.length?(activeCategory==='all'?rows[0].monitor_global_enabled!==false:rows.filter(x=>x.category===activeCategory).every(x=>x.category_enabled!==false)):true;}
-async function load(){try{rows=(await get('/channels')).channels;render()}catch(e){toast('读取渠道失败：'+e.message)}}
+async function load() {
+    try {
+        const [chRes, iqRes, uRes] = await Promise.all([
+            get('/channels'),
+            fetch('/api/iq-check/state').then(r => r.json()).catch(() => null),
+            fetch('/api/analytics/today-usage').then(r => r.json()).catch(() => null)
+        ]);
+        rows = chRes.channels || [];
+        if (iqRes && iqRes.success && iqRes.data) {
+            _iqStateData = iqRes.data.state || {};
+            _iqChannelModels = iqRes.data.channel_models || {};
+            window._iqStateData = _iqStateData;
+            window._iqChannelModels = _iqChannelModels;
+        }
+        if (uRes && uRes.success && uRes.data) {
+            _todayUsageChannels = {};
+            (uRes.data.channels || []).forEach(c => {
+                _todayUsageChannels[String(c.id)] = c;
+            });
+            window._todayUsageChannels = _todayUsageChannels;
+        }
+        render();
+    } catch(e) {
+        toast('读取渠道失败：' + e.message);
+    }
+}
 async function toggle(e){try{await get('/channels/'+e.target.dataset.id+'/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:e.target.checked})});toast(e.target.checked?'渠道已启用':'渠道已停用');load()}catch(x){e.target.checked=!e.target.checked;toast('切换失败：'+x.message)}}
 async function testOne(id){try{toast('正在测试…');const d=await get('/test/'+id);toast(d.ok?`正常 · ${d.last_latency_ms} ms`:`失败 · ${d.last_message}`);load()}catch(e){toast('测试失败：'+e.message)}}
 root.addEventListener('mask-channel-urls-change',()=>render());root.addEventListener('mask-channel-names-change',()=>render());root.addEventListener('click',e=>{const toggle=e.target.closest('.group-collapse-toggle');if(!toggle)return;const section=toggle.closest('.group[data-group-name]');const groups=collapsedGroups();const name=section.dataset.groupName;groups.has(name)?groups.delete(name):groups.add(name);saveCollapsedGroups(groups);render()});root.addEventListener('click',e=>{const card=e.target.closest('.card[data-url]');if(!card||e.target.closest('input,select,button,label'))return;window.open(card.dataset.url,'_blank','noopener,noreferrer')});$('#search').oninput=render;root.querySelectorAll('[data-category]').forEach(b=>b.onclick=()=>{activeCategory=b.dataset.category;root.querySelectorAll('[data-category]').forEach(x=>x.classList.toggle('active',x===b));$('#categoryToggleLabel').textContent=(activeCategory==='all'?'全部':root.querySelector(`[data-category="${activeCategory}"]`)?.textContent||activeCategory)+'监控';render()});$('#globalToggle').onchange=async()=>{const enabled=$('#globalToggle').checked;try{if(activeCategory==='all'){await get('/global-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})})}else{await get('/category-toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category:activeCategory,enabled})})}toast(enabled?'当前分类监控已开启':'当前分类监控已关闭');load()}catch(x){$('#globalToggle').checked=!enabled;toast('分类监控切换失败：'+x.message)}};$('#testAll').onclick=async()=>{for(const c of rows.filter(x=>x.monitor_enabled&&(activeCategory==='all'||x.category===activeCategory)))await testOne(c.id);load()};$('#showAdd').onclick=()=>$('#addPanel').classList.toggle('hidden');root.querySelectorAll('[data-window]').forEach(b=>b.onclick=()=>{root.querySelectorAll('[data-window]').forEach(x=>x.classList.remove('active'));b.classList.add('active');windowSize=Number(b.dataset.window);render()});let windowSize=24;$('#channelMonitorAddForm').onsubmit=async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));try{await get('/channels',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});toast('渠道已添加');e.target.reset();load()}catch(x){toast('添加失败：'+x.message)}};load();setInterval(load,30000);
@@ -792,7 +1043,7 @@ root.addEventListener('mask-channel-urls-change',()=>render());root.addEventList
             <div class="page-toolbar">
                 <div>
                     <h1>今日使用画像</h1>
-                    <div class="sub">New 分组消耗、各上游渠道分流、缓存命中率与延迟全景监控</div>
+                    <div class="sub">New 分组消耗、用户请求量与 Prompt 缓存命中表现全景监控</div>
                 </div>
                 <div class="toolbar-actions">
                     <span id="usageUpdateTime" class="hint">更新于 —</span>
@@ -848,49 +1099,7 @@ root.addEventListener('mask-channel-urls-change',()=>render());root.addEventList
                 </div>
             </div>
 
-            <!-- Channel Usage Table -->
-            <div class="usage-table-card">
-                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
-                    <div>
-                        <h2 style="margin:0;font-size:18px;">各渠道分流画像</h2>
-                        <div class="desc" style="margin:2px 0 0;font-size:12.5px;color:var(--muted)">今日各上游渠道实际承载的 Token 吞吐、请求次数、缓存率与平均响应延迟</div>
-                    </div>
-                    <div style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(0,122,255,0.05);border:1px solid rgba(0,122,255,0.18);border-radius:8px;padding:4px 10px;">
-                        <span style="font-size:12px;font-weight:600;color:var(--primary,#007aff);white-space:nowrap;">⚡ 一键改 GPT 检测模型:</span>
-                        <select id="batchGptModelSelect" style="padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface,#fff);color:var(--text);outline:none;cursor:pointer;">
-                            <option value="gpt-5.6-sol" selected>gpt-5.6-sol (推荐)</option>
-                            <option value="gpt-5.5">gpt-5.5</option>
-                            <option value="gpt-5.6-terra">gpt-5.6-terra</option>
-                            <option value="gpt-6-astra">gpt-6-astra</option>
-                            <option value="codex-auto-review">codex-auto-review</option>
-                            <option value="__custom__">自定义输入模型…</option>
-                        </select>
-                        <button class="btn btn-primary" type="button" id="btnBatchGptModel" style="padding:4px 10px;font-size:12px;white-space:nowrap;" onclick="batchApplyGptModel()">应用全部 GPT 渠道</button>
-                    </div>
-                </div>
-                <div class="usage-tbl-wrap">
-                    <table class="usage-tbl" id="channelUsageTable">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>渠道名称</th>
-                                <th style="text-align:right">分流请求</th>
-                                <th style="text-align:right">承载 Token</th>
-                                <th>缓存命中率</th>
-                                <th style="text-align:right">今日消耗</th>
-                                <th style="text-align:right">平均延迟</th>
-                                <th>检测模型</th>
-                                <th style="text-align:center">整点智商检测 (12条)</th>
-                                <th style="text-align:right;padding-right:12px;">智商检测操作</th>
-                            </tr>
-                        </thead>
-                        <tbody id="channelUsageTbody">
-                            <tr><td colspan="10" style="text-align:center;padding:24px;color:var(--muted)">正在读取渠道分流…</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
+            </section>
         
         <section id="page-priority-log" class="page" role="tabpanel" aria-label="new 优先级调整">
             <div class="page-toolbar">
@@ -5000,33 +5209,29 @@ function getCategoryTag(cat) {
         }
     }
 
-    // ---------- 智商检测交互处理函数 ----------
-    async function onIqModelChange(cid, model) {
+    
+    // Expose IQ Checker functions globally on window
+    window.onIqModelChange = async function(cid, model) {
         try {
             await fetch(`/api/iq-check/channel/${cid}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ selected_model: model })
             });
-            if (_iqStateData && _iqStateData.channels && _iqStateData.channels[String(cid)]) {
-                _iqStateData.channels[String(cid)].selected_model = model;
+            if (window._iqStateData && window._iqStateData.channels && window._iqStateData.channels[String(cid)]) {
+                window._iqStateData.channels[String(cid)].selected_model = model;
             }
         } catch (e) {
             alert('保存模型失败: ' + e.message);
         }
-    }
+    };
 
-    async function onIqToggleChange(cid, enabled) {
+    window.onIqToggleChange = async function(cid, enabled) {
         const cidStr = String(cid);
-        if (!_iqStateData) _iqStateData = {};
-        if (!_iqStateData.channels) _iqStateData.channels = {};
-        if (!_iqStateData.channels[cidStr]) _iqStateData.channels[cidStr] = {};
-        _iqStateData.channels[cidStr].enabled = enabled;
-
-        // 瞬间重新渲染，毫秒级即时反馈视觉与留白
-        if (window._lastTodayUsageData) {
-            renderTodayUsage(window._lastTodayUsageData);
-        }
+        if (!window._iqStateData) window._iqStateData = {};
+        if (!window._iqStateData.channels) window._iqStateData.channels = {};
+        if (!window._iqStateData.channels[cidStr]) window._iqStateData.channels[cidStr] = {};
+        window._iqStateData.channels[cidStr].enabled = enabled;
 
         try {
             const resp = await fetch(`/api/iq-check/channel/${cid}`, {
@@ -5040,10 +5245,14 @@ function getCategoryTag(cat) {
             }
         } catch (e) {
             alert('切换开关失败: ' + e.message);
+        } finally {
+            if (typeof window.reloadChannelMonitor === 'function') {
+                window.reloadChannelMonitor();
+            }
         }
-    }
+    };
 
-    async function runIqTestNow(cid, btnEl) {
+    window.runIqTestNow = async function(cid, btnEl) {
         const btn = btnEl || document.getElementById(`btnIqTest_${cid}`);
         const originalHtml = btn ? btn.innerHTML : '测';
         if (btn) {
@@ -5054,7 +5263,7 @@ function getCategoryTag(cat) {
         }
 
         const cidStr = String(cid);
-        const selModel = (_iqStateData && _iqStateData.channels && _iqStateData.channels[cidStr] && _iqStateData.channels[cidStr].selected_model) || null;
+        const selModel = (window._iqStateData && window._iqStateData.channels && window._iqStateData.channels[cidStr] && window._iqStateData.channels[cidStr].selected_model) || null;
         try {
             const res = await fetch(`/api/iq-check/run/${cid}`, {
                 method: 'POST',
@@ -5066,13 +5275,15 @@ function getCategoryTag(cat) {
                 const resData = d.data;
                 const statusName = resData.status === 'green' ? '正确 (绿 21)' : (resData.status === 'yellow' ? '差一巧合 (黄 29)' : '错误 (红)');
                 alert(`渠道 #${cid} 手动检测完成！\n模型: ${resData.model || selModel || '默认'}\n答案: ${resData.answer != null ? resData.answer : '无'}\n判定: ${statusName}\n思考强度: ${resData.effort || '自适应'}\n耗时: ${resData.duration}s`);
-                await loadTodayUsage(true);
             } else {
                 alert('检测失败: ' + (d.message || '未知错误'));
             }
         } catch (e) {
             alert('请求失败: ' + e.message);
         } finally {
+            if (typeof window.reloadChannelMonitor === 'function') {
+                await window.reloadChannelMonitor();
+            }
             if (btn) {
                 btn.disabled = false;
                 btn.innerHTML = originalHtml;
@@ -5080,11 +5291,11 @@ function getCategoryTag(cat) {
                 btn.style.background = '';
             }
         }
-    }
+    };
 
-    async function batchApplyGptModel() {
-        const sel = document.getElementById('batchGptModelSelect');
-        const btn = document.getElementById('btnBatchGptModel');
+    window.batchApplyGptModel = async function() {
+        const sel = document.getElementById('batchGptIqModelSelect') || document.getElementById('batchGptModelSelect');
+        const btn = document.getElementById('btnBatchGptIqModel') || document.getElementById('btnBatchGptModel');
         if (!sel || !btn) return;
 
         let targetModel = sel.value;
@@ -5107,7 +5318,9 @@ function getCategoryTag(cat) {
             const d = await resp.json();
             if (d.success) {
                 alert(`成功！已将全部 ${d.count} 个 GPT 渠道的智商检测模型一键更改为：${d.model}`);
-                await loadTodayUsage(true);
+                if (typeof window.reloadChannelMonitor === 'function') {
+                    await window.reloadChannelMonitor();
+                }
             } else {
                 alert('批量修改失败: ' + (d.message || '未知错误'));
             }
@@ -5117,11 +5330,11 @@ function getCategoryTag(cat) {
             btn.disabled = false;
             btn.textContent = originalText;
         }
-    }
+    };
 
-    function showIqDetail(cid, histIdx) {
+    window.showIqDetail = function(cid, histIdx) {
         const cidStr = String(cid);
-        const hist = (_iqStateData && _iqStateData.channels && _iqStateData.channels[cidStr] && _iqStateData.channels[cidStr].history) || [];
+        const hist = (window._iqStateData && window._iqStateData.channels && window._iqStateData.channels[cidStr] && window._iqStateData.channels[cidStr].history) || [];
         const item = hist[histIdx];
         if (!item) return;
 
@@ -5140,19 +5353,24 @@ function getCategoryTag(cat) {
         modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
         modal.innerHTML = `
             <div class="iq-modal-card">
-                <h3><span>🧠 糖果题目检测详情</span> <button style="border:none;background:none;font-size:18px;cursor:pointer" onclick="this.closest('.iq-modal-overlay').remove()">✕</button></h3>
-                <div class="iq-modal-row"><span class="k">渠道编号</span><span class="v">#${cid}</span></div>
-                <div class="iq-modal-row"><span class="k">检测时间</span><span class="v">${item.at || '未知'}</span></div>
+                <h3>
+                    <span>渠道 #${cid} · 智商检测详情</span>
+                    <button class="btn btn-ghost" style="padding:2px 8px;font-size:12px;" onclick="this.closest('.iq-modal-overlay').remove()">✕</button>
+                </h3>
+                <div class="iq-modal-row"><span class="k">检测时间</span><span class="v">${item.at || '-'}</span></div>
                 <div class="iq-modal-row"><span class="k">测试模型</span><span class="v">${item.model || '-'}</span></div>
-                <div class="iq-modal-row"><span class="k">响应耗时</span><span class="v">${item.duration || 0} 秒</span></div>
-                <div class="iq-modal-row"><span class="k">模型最终输出答案</span><span class="v" style="font-size:16px;color:${color}">${item.answer != null ? item.answer : '未提取到数字'}</span></div>
-                <div class="iq-modal-row"><span class="k">判定结论</span><span class="v" style="color:${color}">${statusText}</span></div>
-                <div style="font-size:12px;color:var(--muted);margin-top:12px;font-weight:600">模型回答摘要 / 最终输出：</div>
-                <div class="iq-modal-box">${(item.summary || '无回答内容').replace(/\n/g, '<br>')}</div>
+                <div class="iq-modal-row"><span class="k">思考强度</span><span class="v">${item.effort || '自适应'}</span></div>
+                <div class="iq-modal-row"><span class="k">耗时</span><span class="v">${item.duration || 0}s</span></div>
+                <div class="iq-modal-row"><span class="k">判定结果</span><span class="v" style="color:${color};font-weight:700;">${statusText}</span></div>
+                <div class="iq-modal-row"><span class="k">提取答案</span><span class="v" style="color:${color};font-weight:700;font-size:15px;">${item.answer != null ? item.answer : '未提取到'}</span></div>
+                ${item.quota ? `<div class="iq-modal-row"><span class="k">消耗 Quota</span><span class="v">${item.quota}</span></div>` : ''}
+                ${item.prompt_tokens ? `<div class="iq-modal-row"><span class="k">Prompt / Completion</span><span class="v">${item.prompt_tokens} / ${item.completion_tokens}</span></div>` : ''}
+                <div style="margin-top:10px;font-size:12px;color:var(--muted,#64748b);font-weight:600;">模型完整回复内容:</div>
+                <div class="iq-modal-box">${(item.full_text || '无回复内容').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
             </div>
         `;
         document.body.appendChild(modal);
-    }
+    };
 
 </script>
 </body>
