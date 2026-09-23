@@ -158,14 +158,24 @@ def run_single_iq_test(cid: int, model: str | None = None) -> dict[str, Any]:
 
     dur = round(time.time() - t0, 2)
     if data:
-        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        ans = parse_answer(content)
+        msg = data.get("choices", [{}])[0].get("message", {})
+        content = msg.get("content", "")
+        reasoning = msg.get("reasoning_content", "") or msg.get("reasoning", "")
+        full_text = content
+        if reasoning and reasoning.strip():
+            full_text = f"[思考过程]\n{reasoning.strip()}\n\n[最终回答]\n{content.strip()}"
+        elif not full_text:
+            full_text = reasoning or ""
+
+        ans = parse_answer(full_text)
         if ans == 21:
             status = "green"
         elif ans == 29:
             status = "yellow"
         else:
             status = "red"
+
+        usage = data.get("usage", {})
         res = {
             "ok": True,
             "model": model,
@@ -173,7 +183,10 @@ def run_single_iq_test(cid: int, model: str | None = None) -> dict[str, Any]:
             "status": status,
             "duration": dur,
             "effort": used_effort,
-            "summary": content[-150:].strip() if content else "",
+            "full_text": full_text,
+            "summary": content[-150:].strip() if content else (reasoning[-150:].strip() if reasoning else ""),
+            "prompt_tokens": usage.get("prompt_tokens"),
+            "completion_tokens": usage.get("completion_tokens"),
             "at": now_str
         }
     else:
@@ -184,6 +197,7 @@ def run_single_iq_test(cid: int, model: str | None = None) -> dict[str, Any]:
             "status": "red",
             "duration": dur,
             "effort": used_effort,
+            "full_text": f"请求失败: {last_err_msg}",
             "summary": f"请求失败: {last_err_msg[:100]}",
             "at": now_str
         }

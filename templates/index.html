@@ -5582,7 +5582,7 @@ function getCategoryTag(cat) {
                 ${item.quota ? `<div class="iq-modal-row"><span class="k">消耗 Quota</span><span class="v">${item.quota}</span></div>` : ''}
                 ${item.prompt_tokens ? `<div class="iq-modal-row"><span class="k">Prompt / Completion</span><span class="v">${item.prompt_tokens} / ${item.completion_tokens}</span></div>` : ''}
                 <div style="margin-top:10px;font-size:12px;color:var(--muted,#64748b);font-weight:600;">模型完整回复内容:</div>
-                <div class="iq-modal-box">${(item.full_text || '无回复内容').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+                <div class="iq-modal-box" style="white-space:pre-wrap;word-break:break-word;max-height:260px;font-family:monospace;font-size:12px;">${(item.full_text || item.summary || '无回复内容').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
             </div>
         `;
         document.body.appendChild(modal);
