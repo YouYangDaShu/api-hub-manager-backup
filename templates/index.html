@@ -503,11 +503,115 @@ html[data-theme="dark"] #page-channel-monitor .seg button.active {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* 极简精致的已关闭渠道小卡片 */
+#page-channel-monitor .group-off {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)) !important;
+  gap: 6px !important;
+  margin-top: 8px !important;
+}
+@media (max-width: 600px) {
+  #page-channel-monitor .group-off {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 5px !important;
+  }
+}
+#page-channel-monitor .group-off .card.compact-off {
+  min-height: 32px !important;
+  height: 32px !important;
+  padding: 4px 8px !important;
+  border-radius: 7px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 6px !important;
+}
+#page-channel-monitor .group-off .compact-name {
+  display: flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+}
+#page-channel-monitor .group-off .compact-name .dot {
+  width: 5px !important;
+  height: 5px !important;
+  flex: none !important;
+}
+#page-channel-monitor .group-off .compact-name strong {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+#page-channel-monitor .group-off .compact-meta {
+  display: none !important;
+}
+#page-channel-monitor .group-off .compact-right {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0 !important;
+  flex: none !important;
+}
+#page-channel-monitor .group-off .compact-right > span {
+  display: none !important;
+}
+#page-channel-monitor .group-off .compact-right .switch {
+  width: 28px !important;
+  height: 16px !important;
+}
+#page-channel-monitor .group-off .compact-right .slider:before {
+  width: 12px !important;
+  height: 12px !important;
+  left: 2px !important;
+  top: 2px !important;
+}
+#page-channel-monitor .group-off .compact-right .switch input:checked + .slider:before {
+  transform: translateX(12px) !important;
+}
+
 #page-channel-monitor .url-link {
   cursor: pointer !important;
-  text-decoration: underline !important;
-  text-underline-offset: 2px !important;
+  text-decoration: none !important;
 }
+#page-channel-monitor .compact-off {
+  min-height: 38px !important;
+  height: 38px !important;
+  padding: 6px 12px !important;
+  border-radius: 8px !important;
+}
+#page-channel-monitor .compact-name strong {
+  font-size: 13px !important;
+}
+#page-channel-monitor .compact-meta {
+  font-size: 11px !important;
+}
+#page-channel-monitor .compact-right > span {
+  font-size: 11px !important;
+}
+#page-channel-monitor .compact-off .switch {
+  width: 34px !important;
+  height: 20px !important;
+}
+#page-channel-monitor .compact-off .switch .slider:before {
+  width: 14px !important;
+  height: 14px !important;
+  left: 3px !important;
+  top: 3px !important;
+}
+#page-channel-monitor .compact-off .switch input:checked + .slider:before {
+  transform: translateX(14px) !important;
+}
+#page-channel-monitor .group-off {
+  gap: 6px !important;
+  margin-top: 8px !important;
+}
+#page-channel-monitor .group-off .compact-off {
+  flex: 1 1 240px !important;
+}
+
 #page-channel-monitor .url-link:hover {
   color: var(--blue, #007aff) !important;
 }
