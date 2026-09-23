@@ -483,14 +483,14 @@ html[data-theme="dark"] #page-channel-monitor .seg button.active {
 #page-channel-monitor .group-collapse-toggle:focus-visible{outline:2px solid var(--primary);outline-offset:5px;border-radius:6px}
 @media(max-width:760px){#page-channel-monitor .group-head-meta{gap:7px}#page-channel-monitor .group-count{max-width:170px;text-align:right}}
 
-/* User requested: group-grid max 2 columns (not 3), body strictly 2 columns (1fr 1fr), and COMPACT HEIGHT */
+/* User requested: group-grid max 2 columns (not 3), body strictly 2 columns (1fr 1fr), and ULTRA COMPACT HEIGHT */
 #page-channel-monitor .shell {
   padding-bottom: 120px !important;
 }
 #page-channel-monitor .group-grid {
   display: grid !important;
   grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  gap: 14px !important;
+  gap: 10px !important;
 }
 @media (max-width: 860px) {
   #page-channel-monitor .group-grid {
@@ -498,77 +498,105 @@ html[data-theme="dark"] #page-channel-monitor .seg button.active {
   }
 }
 #page-channel-monitor .card {
-  padding: 12px 14px !important;
-  border-radius: 12px !important;
+  padding: 8px 11px !important;
+  border-radius: 10px !important;
 }
 #page-channel-monitor .card-head {
-  gap: 10px !important;
+  gap: 6px !important;
 }
 #page-channel-monitor .card-head > div:first-child {
-  padding-right: 28px !important;
+  padding-right: 16px !important;
 }
 #page-channel-monitor .name {
-  font-size: 15px !important;
-  line-height: 1.25 !important;
+  font-size: 13.5px !important;
+  line-height: 1.15 !important;
 }
 #page-channel-monitor .meta {
-  margin-top: 2px !important;
-  font-size: 11px !important;
+  margin-top: 1px !important;
+  font-size: 10px !important;
 }
 #page-channel-monitor .card .api-stamp {
-  height: 22px !important;
-  padding: 2px 7px !important;
-  font-size: 11px !important;
+  height: 18px !important;
+  padding: 0 5px !important;
+  font-size: 9.5px !important;
+  border-radius: 4px !important;
+  line-height: 16px !important;
+}
+#page-channel-monitor .card .switch {
+  width: 30px !important;
+  height: 16px !important;
+}
+#page-channel-monitor .card .slider:before {
+  width: 12px !important;
+  height: 12px !important;
+  left: 2px !important;
+  top: 2px !important;
+}
+#page-channel-monitor .card .switch input:checked+.slider:before {
+  transform: translateX(14px) !important;
 }
 #page-channel-monitor .body {
   display: grid !important;
   grid-template-columns: 1fr 1fr !important;
-  gap: 6px !important;
-  margin: 9px 0 7px !important;
+  gap: 4px !important;
+  margin: 5px 0 4px !important;
 }
 #page-channel-monitor .metric {
-  padding: 6px 10px !important;
-  border-radius: 8px !important;
+  padding: 3px 7px !important;
+  border-radius: 6px !important;
   min-width: 0 !important;
   overflow: hidden !important;
+  box-sizing: border-box !important;
 }
 #page-channel-monitor .metric label {
-  font-size: 10.5px !important;
-  margin-bottom: 1px !important;
+  font-size: 9.5px !important;
+  margin-bottom: 0 !important;
   color: #8b96a5 !important;
+  line-height: 1.1 !important;
 }
 #page-channel-monitor .metric strong {
-  font-size: 15px !important;
-  line-height: 1.2 !important;
+  font-size: 13.5px !important;
+  line-height: 1.15 !important;
 }
 #page-channel-monitor .metric select.model-select {
-  font-size: 13px !important;
+  font-size: 11px !important;
   margin-top: 0 !important;
-  height: 22px !important;
-  line-height: 22px !important;
-  padding: 0 16px 0 0 !important;
+  height: 18px !important;
+  line-height: 18px !important;
+  padding: 0 12px 0 0 !important;
+}
+#page-channel-monitor .btn-iq-test {
+  padding: 0 5px !important;
+  min-height: 19px !important;
+  height: 19px !important;
+  max-height: 19px !important;
+  line-height: 17px !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  border-radius: 4px !important;
+  box-sizing: border-box !important;
 }
 #page-channel-monitor .timelines-wrapper {
-  margin-top: 8px !important;
-  gap: 6px !important;
+  margin-top: 5px !important;
+  gap: 3px !important;
 }
 #page-channel-monitor .timeline {
-  height: 16px !important;
-  gap: 2px !important;
+  height: 13px !important;
+  gap: 1.5px !important;
   margin-top: 0 !important;
 }
 #page-channel-monitor .timeline .tick {
-  height: 3px !important;
-  border-radius: 2px !important;
+  height: 2px !important;
+  border-radius: 1.5px !important;
 }
 #page-channel-monitor .timeline .tick.ok {
-  height: 16px !important;
+  height: 13px !important;
 }
 #page-channel-monitor .timeline .tick.degraded {
-  height: 10px !important;
+  height: 8px !important;
 }
 #page-channel-monitor .timeline .tick.bad {
-  height: 5px !important;
+  height: 4px !important;
 }
 </style>
 <main class="shell">
@@ -678,16 +706,16 @@ function card(c, historyWindow=HISTORY_WINDOW){
     let iqSwitchTitle = '';
 
     if (off) {
-        iqStatusBadge = `<span style="font-size:10.5px;color:var(--muted);background:rgba(120,120,128,0.12);padding:1px 5px;border-radius:4px;white-space:nowrap;">跟随停用</span>`;
+        iqStatusBadge = `<span style="font-size:10px;color:var(--muted);background:rgba(120,120,128,0.12);padding:0 4px;border-radius:3px;white-space:nowrap;">跟随停用</span>`;
         iqSwitchChecked = '';
         iqSwitchDisabled = 'disabled';
         iqSwitchTitle = '可用性监控已关，智商检测跟随停用';
     } else if (isIqExplicitlyDisabled) {
-        iqStatusBadge = `<span style="font-size:10.5px;color:#8e8e93;background:rgba(120,120,128,0.12);padding:1px 5px;border-radius:4px;white-space:nowrap;">智商已关</span>`;
+        iqStatusBadge = `<span style="font-size:10px;color:#8e8e93;background:rgba(120,120,128,0.12);padding:0 4px;border-radius:3px;white-space:nowrap;">智商已关</span>`;
         iqSwitchChecked = '';
         iqSwitchTitle = '已单独关闭智商检测';
     } else {
-        iqStatusBadge = `<span style="font-size:10.5px;color:#34c759;background:rgba(52,199,89,0.12);padding:1px 5px;border-radius:4px;font-weight:600;white-space:nowrap;">监控中</span>`;
+        iqStatusBadge = `<span style="font-size:10px;color:#34c759;background:rgba(52,199,89,0.12);padding:0 4px;border-radius:3px;font-weight:600;white-space:nowrap;">监控中</span>`;
         iqSwitchChecked = 'checked';
         iqSwitchTitle = '智商检测正常运行中，点击可关闭';
     }
@@ -702,8 +730,8 @@ function card(c, historyWindow=HISTORY_WINDOW){
         let barColor = '#8e8e93';
         if (crate >= 80) barColor = '#34c759';
         else if (crate >= 50) barColor = '#007aff';
-        cacheBarHtml = `<div style="width:40px;height:5px;background:rgba(120,120,128,0.15);border-radius:3px;overflow:hidden;flex-shrink:0;" title="今日输入: ${usageData.prompt_tokens_m.toFixed(2)}M, 缓存命中: ${(usageData.cache_tokens_m||0).toFixed(2)}M">
-            <div style="width:${Math.min(100, Math.max(0, crate))}%;height:100%;background:${barColor};border-radius:3px;"></div>
+        cacheBarHtml = `<div style="width:34px;height:4px;background:rgba(120,120,128,0.15);border-radius:2px;overflow:hidden;flex-shrink:0;" title="今日输入: ${usageData.prompt_tokens_m.toFixed(2)}M, 缓存命中: ${(usageData.cache_tokens_m||0).toFixed(2)}M">
+            <div style="width:${Math.min(100, Math.max(0, crate))}%;height:100%;background:${barColor};border-radius:2px;"></div>
         </div>`;
     }
 
@@ -741,26 +769,26 @@ function card(c, historyWindow=HISTORY_WINDOW){
                 <strong>${rate}</strong>
             </div>
 
-            <!-- Row 2: 智商检测模型 | 今日缓存率 -->
+            <!-- Row 2: 智商检测 | 今日缓存率 (极致紧凑) -->
             <div class="metric">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                    <label style="margin:0;color:#8b96a5;font-size:11px;font-weight:600;white-space:nowrap;">智商检测</label>
-                    <label class="iq-switch" style="width:26px;height:14px;margin:0;flex-shrink:0;" title="${iqSwitchTitle}">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
+                    <label style="margin:0;color:#8b96a5;font-size:10px;font-weight:600;white-space:nowrap;">智商检测</label>
+                    <label class="iq-switch" style="width:23px;height:13px;margin:0;flex-shrink:0;" title="${iqSwitchTitle}">
                         <input type="checkbox" ${iqSwitchChecked} ${iqSwitchDisabled} onchange="window.onIqToggleChange(${c.id}, this.checked)">
-                        <span class="iq-slider" style="border-radius:14px;"></span>
+                        <span class="iq-slider" style="border-radius:13px;"></span>
                     </label>
                 </div>
-                <div style="display:flex;align-items:center;gap:4px;margin-top:2px;">
-                    <select class="model-select iq-model-select" data-cid="${c.id}" onchange="window.onIqModelChange(${c.id}, this.value)" style="flex:1;min-width:0;padding:2px 14px 2px 4px;font-size:12.5px;font-weight:700;">
+                <div style="display:flex;align-items:center;gap:3px;margin-top:1px;">
+                    <select class="model-select iq-model-select" data-cid="${c.id}" onchange="window.onIqModelChange(${c.id}, this.value)" style="flex:1;min-width:0;padding:1px 12px 1px 2px;font-size:11.5px;font-weight:700;height:20px;line-height:20px;">
                         ${iqOpts || `<option value="${esc(selIqModel)}">${esc(selIqModel)}</option>`}
                     </select>
-                    <button class="btn btn-ghost" id="btnIqTest_${c.id}" style="padding:2px 8px;font-size:11px;min-width:28px;height:24px;line-height:1;border:1px solid var(--line);background:#fff;border-radius:5px;cursor:pointer;flex-shrink:0;" title="立即手动测试一次智商" onclick="window.runIqTestNow(${c.id}, this)">测</button>
+                    <button class="btn btn-ghost btn-iq-test" id="btnIqTest_${c.id}" style="padding:0 6px;font-size:10px;min-width:24px;height:20px;line-height:18px;border:1px solid var(--line);background:#fff;border-radius:4px;cursor:pointer;flex-shrink:0;" title="立即手动测试一次智商" onclick="window.runIqTestNow(${c.id}, this)">测</button>
                 </div>
             </div>
             <div class="metric">
                 <label>今日缓存率</label>
-                <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
-                    <strong style="font-size:17px;color:#182438;">${cacheRateDisplay}</strong>
+                <div style="display:flex;align-items:center;gap:5px;margin-top:1px;height:20px;">
+                    <strong style="font-size:14.5px;color:#182438;line-height:20px;">${cacheRateDisplay}</strong>
                     ${cacheBarHtml}
                 </div>
             </div>
@@ -775,18 +803,18 @@ function card(c, historyWindow=HISTORY_WINDOW){
                 <strong>${c.consecutive_failures || 0} 次</strong>
             </div>
         </div>
-        <div class="timelines-wrapper" style="margin-top:14px;display:flex;flex-direction:column;gap:10px;">
+        <div class="timelines-wrapper" style="margin-top:6px;display:flex;flex-direction:column;gap:4px;">
             <div>
-                <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#7c8798;margin-bottom:4px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#7c8798;margin-bottom:2px;">
                     <span>可用性探测 (24h)</span>
-                    <span style="font-size:10px;">${c.last_latency_ms ? c.last_latency_ms + ' ms' : ''}</span>
+                    <span style="font-size:9.5px;">${c.last_latency_ms ? c.last_latency_ms + ' ms' : ''}</span>
                 </div>
                 ${timeline(c, historyWindow)}
             </div>
             <div>
-                <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#7c8798;margin-bottom:4px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#7c8798;margin-bottom:2px;">
                     <span>整点智商检测</span>
-                    <span style="font-size:10px;font-weight:600;">${iqStatusSummary}</span>
+                    <span style="font-size:9.5px;font-weight:600;">${iqStatusSummary}</span>
                 </div>
                 ${iqTimeline(c, historyWindow)}
             </div>
@@ -5229,7 +5257,7 @@ function getCategoryTag(cat) {
                     const opHtml = `<div style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">
                         ${switchHtml}
                         ${statusBadge}
-                        <button class="btn btn-ghost" id="btnIqTest_${c.id}" style="padding:2px 8px;font-size:11px;min-width:32px;transition:all .15s ease;" title="立即手动测试一次智商" onclick="runIqTestNow(${c.id}, this)">测</button>
+                        <button class="btn btn-ghost btn-iq-test" id="btnIqTest_${c.id}" style="padding:2px 8px;font-size:11px;min-width:32px;transition:all .15s ease;" title="立即手动测试一次智商" onclick="runIqTestNow(${c.id}, this)">测</button>
                     </div>`;
 
                     // 只有在既未跟随停用、且未单独关闭智商检测时，才展示时间轴色块；否则完全留白！
@@ -5263,7 +5291,7 @@ function getCategoryTag(cat) {
                             <div style="display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;width:100%;white-space:nowrap">
                                 ${switchHtml}
                                 ${statusBadge}
-                                <button class="btn btn-ghost" id="btnIqTest_${c.id}" style="padding:2px 7px;font-size:11px;min-width:30px;transition:all .15s ease;" title="立即手动测试一次智商" onclick="runIqTestNow(${c.id}, this)">测</button>
+                                <button class="btn btn-ghost btn-iq-test" id="btnIqTest_${c.id}" style="padding:2px 7px;font-size:11px;min-width:30px;transition:all .15s ease;" title="立即手动测试一次智商" onclick="runIqTestNow(${c.id}, this)">测</button>
                             </div>
                         </td>
                     </tr>`;
