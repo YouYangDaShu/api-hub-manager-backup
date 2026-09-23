@@ -3235,3 +3235,277 @@ async def tokens_status():
             }
         )
     return {"success": True, "data": rows}
+
+
+# ==================== 今日 New 分组与渠道实时使用画像 ====================
+_USAGE_PROFILE_CACHE = {"data": None, "ts": 0}
+
+@router.get("/analytics/today-usage")
+async def get_today_usage_analytics():
+    """实时统计今日 New 分组及各渠道的 Token、请求次数、缓存率、延迟与 Quota。带 30 秒内存缓存防打满 SQLite。"""
+    now = time.time()
+    if _USAGE_PROFILE_CACHE["data"] and (now - _USAGE_PROFILE_CACHE["ts"] < 30):
+        return {"success": True, "data": _USAGE_PROFILE_CACHE["data"], "cached": True}
+
+    today_start = int(time.mktime(time.strptime(time.strftime("%Y-%m-%d 00:00:00"), "%Y-%m-%d %H:%M:%S")))
+    db_path = os.environ.get("NEWAPI_DB", "/opt/new-api/data/one-api.db")
+
+    if not os.path.exists(db_path):
+        return {"success": False, "message": "New API 数据库不存在"}
+
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        c = conn.cursor()
+
+        # 1. 定位今日第一条日志 ID，加速查询
+        c.execute("SELECT id FROM logs WHERE created_at >= ? ORDER BY id ASC LIMIT 1", (today_start,))
+        row = c.fetchone()
+        if not row:
+            conn.close()
+            empty_res = {"groups": [], "channels": [], "summary": {"total_requests": 0, "total_tokens_m": 0, "total_cache_m": 0, "overall_cache_rate": 0}}
+            _USAGE_PROFILE_CACHE["data"] = empty_res
+            _USAGE_PROFILE_CACHE["ts"] = now
+            return {"success": True, "data": empty_res, "cached": False}
+
+        first_id = row[0]
+
+        # 2. 映射渠道名称与类型
+        c.execute("SELECT id, name, type FROM channels")
+        ch_map = {r[0]: (r[1], r[2]) for r in c.fetchall()}
+
+        # 3. 流式读取今日所有日志
+        c.execute("""
+            SELECT `group`, channel_id, prompt_tokens, completion_tokens, quota, use_time, other
+            FROM logs
+            WHERE id >= ?
+        """, (first_id,))
+
+        groups_data = {}
+        channels_data = {}
+        tot_reqs = 0
+        tot_tokens = 0
+        tot_cache = 0
+
+        for grp, cid, p, comp, q, ut, ostr in c.fetchall():
+            p = p or 0
+            comp = comp or 0
+            tok = p + comp
+            tot_reqs += 1
+            tot_tokens += tok
+
+            ct = 0
+            if ostr and "cache_tokens" in ostr:
+                try:
+                    ct = json.loads(ostr).get("cache_tokens", 0) or 0
+                except Exception:
+                    pass
+            tot_cache += ct
+
+            # 过滤掉非单一真实分组（如 @manual、带逗号的混合跨组或空分组）
+            if grp and not grp.startswith("@manual") and "," not in grp:
+                if grp not in groups_data:
+                    groups_data[grp] = {"group": grp, "reqs": 0, "tokens": 0, "prompt": 0, "completion": 0, "cache": 0, "quota": 0}
+                g = groups_data[grp]
+                g["reqs"] += 1
+                g["tokens"] += tok
+                g["prompt"] += p
+                g["completion"] += comp
+                g["cache"] += ct
+                g["quota"] += (q or 0)
+
+            if cid and cid > 0:
+                if cid not in channels_data:
+                    cname, ctype = ch_map.get(cid, (f"未知渠道({cid})", 0))
+                    channels_data[cid] = {"id": cid, "name": cname, "reqs": 0, "tokens": 0, "prompt": 0, "completion": 0, "cache": 0, "quota": 0, "use_time": 0}
+                ch = channels_data[cid]
+                ch["reqs"] += 1
+                ch["tokens"] += tok
+                ch["prompt"] += p
+                ch["completion"] += comp
+                ch["cache"] += ct
+                ch["quota"] += (q or 0)
+                ch["use_time"] += (ut or 0)
+
+        conn.close()
+
+        res_groups = []
+        for grp, g in groups_data.items():
+            p = g["prompt"]
+            crate = (g["cache"] / p * 100) if p > 0 else 0
+            res_groups.append({
+                "group": grp,
+                "requests": g["reqs"],
+                "total_tokens_m": round(g["tokens"] / 1e6, 2),
+                "prompt_tokens_m": round(g["prompt"] / 1e6, 2),
+                "completion_tokens_m": round(g["completion"] / 1e6, 2),
+                "cache_tokens_m": round(g["cache"] / 1e6, 2),
+                "cache_rate": round(crate, 1),
+                "quota": g["quota"]
+            })
+        res_groups.sort(key=lambda x: x["total_tokens_m"], reverse=True)
+
+        res_channels = []
+        for cid, ch in channels_data.items():
+            p = ch["prompt"]
+            crate = (ch["cache"] / p * 100) if p > 0 else 0
+            cnt = ch["reqs"]
+            avg_lat = round(ch["use_time"] / cnt / 1000, 2) if cnt > 0 else 0
+            res_channels.append({
+                "id": cid,
+                "name": ch["name"],
+                "requests": cnt,
+                "total_tokens_m": round(ch["tokens"] / 1e6, 2),
+                "prompt_tokens_m": round(ch["prompt"] / 1e6, 2),
+                "completion_tokens_m": round(ch["completion"] / 1e6, 2),
+                "cache_tokens_m": round(ch["cache"] / 1e6, 2),
+                "cache_rate": round(crate, 1),
+                "avg_latency_s": avg_lat,
+                "quota": ch["quota"]
+            })
+        res_channels.sort(key=lambda x: x["total_tokens_m"], reverse=True)
+
+        result_data = {
+            "groups": res_groups,
+            "channels": res_channels,
+            "summary": {
+                "total_requests": tot_reqs,
+                "total_tokens_m": round(tot_tokens / 1e6, 2),
+                "total_cache_m": round(tot_cache / 1e6, 2),
+                "overall_cache_rate": round(tot_cache / tot_tokens * 100, 1) if tot_tokens > 0 else 0,
+                "active_groups_count": len(res_groups),
+                "active_channels_count": len(res_channels),
+                "updated_at": time.strftime("%H:%M:%S")
+            }
+        }
+        _USAGE_PROFILE_CACHE["data"] = result_data
+        _USAGE_PROFILE_CACHE["ts"] = now
+        return {"success": True, "data": result_data, "cached": False}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+
+# ---------- 智商检测（Candy IQ Check）接口 ----------
+@router.get("/iq-check/state")
+def get_iq_check_state():
+    try:
+        from iq_checker import load_iq_state
+        state = load_iq_state()
+        
+        # Load available models for all channels
+        conn = sqlite3.connect("file:/opt/new-api/data/one-api.db?mode=ro", uri=True)
+        c = conn.cursor()
+        c.execute("SELECT id, name, models FROM channels")
+        ch_models = {}
+        for cid, name, models_str in c.fetchall():
+            ch_models[str(cid)] = [m.strip() for m in (models_str or "").split(",") if m.strip()]
+        conn.close()
+
+        # Get active monitor status directly from channel_monitor
+        mon_enabled = {}
+        try:
+            import channel_monitor
+            for ch in channel_monitor.list_channels():
+                cid = str(ch["id"])
+                mon_enabled[cid] = bool(ch.get("monitor_enabled", True) and ch.get("category_enabled", True) and (ch.get("monitor_global_enabled") is not False))
+        except Exception as me:
+            print(f"[iq_check] error listing channels: {me}")
+
+        return {
+            "success": True,
+            "data": {
+                "state": state,
+                "channel_models": ch_models,
+                "monitor_enabled": mon_enabled
+            }
+        }
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+@router.post("/iq-check/config")
+async def update_iq_check_config(payload: dict):
+    try:
+        from iq_checker import load_iq_state, save_iq_state
+        state = load_iq_state()
+        if "enabled" in payload:
+            state["enabled"] = bool(payload["enabled"])
+        save_iq_state(state)
+        return {"success": True, "data": state}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+@router.post("/iq-check/channel/{cid}")
+async def update_iq_channel_settings(cid: int, payload: dict):
+    try:
+        from iq_checker import load_iq_state, save_iq_state
+        state = load_iq_state()
+        ch_map = state.setdefault("channels", {}).setdefault(str(cid), {
+            "enabled": True,
+            "selected_model": None,
+            "history": []
+        })
+        if "enabled" in payload:
+            ch_map["enabled"] = bool(payload["enabled"])
+        if "selected_model" in payload:
+            ch_map["selected_model"] = str(payload["selected_model"]).strip()
+        save_iq_state(state)
+        return {"success": True, "data": ch_map}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+@router.post("/iq-check/batch-model-gpt")
+async def batch_model_gpt(payload: dict):
+    try:
+        target_model = str(payload.get("model", "")).strip()
+        if not target_model:
+            return {"success": False, "message": "模型名称不能为空"}
+
+        from iq_checker import load_iq_state, save_iq_state
+        state = load_iq_state()
+        channels_state = state.setdefault("channels", {})
+
+        conn = sqlite3.connect("file:/opt/new-api/data/one-api.db?mode=ro", uri=True)
+        c = conn.cursor()
+        c.execute("SELECT id, name, models FROM channels WHERE status=1")
+        channels = c.fetchall()
+        conn.close()
+
+        updated_cids = []
+        for cid, name, models_str in channels:
+            cid_str = str(cid)
+            models = [m.strip() for m in (models_str or "").split(",") if m.strip()]
+            name_lower = (name or "").lower()
+
+            is_claude = any(x in name_lower for x in ("claude", "anthropic")) or any("claude" in m.lower() for m in models)
+            is_grok = "grok" in name_lower or any("grok" in m.lower() for m in models)
+            is_gemini = "gemini" in name_lower or any("gemini" in m.lower() for m in models)
+            is_pure_image = any("image" in m for m in models) and not any(any(x in m for x in ("gpt-5", "gpt-6", "codex", "gpt-4")) for m in models)
+
+            if not (is_claude or is_grok or is_gemini or is_pure_image):
+                if any(x in name_lower for x in ("gpt", "openai", "chatgpt", "wawa", "coco", "一梦", "莫比乌斯", "云彩", "沃可思", "汇流", "dcvx", "yeclaw", "特惠", "企业", "pro", "混合")) or any("gpt" in m.lower() or "o1" in m.lower() or "o3" in m.lower() or "codex" in m.lower() for m in models):
+                    ch_entry = channels_state.setdefault(cid_str, {
+                        "enabled": True,
+                        "selected_model": None,
+                        "history": []
+                    })
+                    ch_entry["selected_model"] = target_model
+                    updated_cids.append(cid)
+
+        save_iq_state(state)
+        return {
+            "success": True,
+            "count": len(updated_cids),
+            "updated_cids": updated_cids,
+            "model": target_model
+        }
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+@router.post("/iq-check/run/{cid}")
+async def trigger_iq_test(cid: int, payload: dict = None):
+    try:
+        from iq_checker import run_single_iq_test
+        model = payload.get("model")
+        res = await asyncio.to_thread(run_single_iq_test, cid, model)
+        return {"success": True, "data": res}
+    except Exception as e:
+        return {"success": False, "message": str(e)}

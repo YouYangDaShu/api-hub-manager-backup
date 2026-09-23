@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="light dark">
     <title>幽羊 API · 中转站渠道整合管理</title>
-    <link rel="stylesheet" href="static/style.css?v=20260916-rebate-v2">
+    <link rel="stylesheet" href="static/style.css?v=20260923-iq-12ticks-v2">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
     <script>
     // Keep topbar context synchronized with the existing page switcher.
@@ -42,7 +42,8 @@
             <nav class="nav rail-nav" role="tablist" aria-label="主导航">
                     <button class="nav-btn active" data-page="dashboard" role="tab" aria-selected="true" title="仪表盘"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span class="nav-label">仪表盘</span></button>
                     <button class="nav-btn" data-page="channel-monitor" role="tab" aria-selected="false" title="渠道可用性"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h3l2.4-6 4.8 12 2.4-6H21"/></svg></span><span class="nav-label">渠道可用性</span></button>
-                                        <button class="nav-btn" data-page="priority-log" role="tab" aria-selected="false" title="new 优先级调整"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h7"/><path d="M16 12l4 3-4 3"/></svg></span><span class="nav-label">new 优先级调整</span></button>
+                                        <button class="nav-btn" data-page="today-usage" role="tab" aria-selected="false" title="今日使用画像"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 20V10M12 20V4M6 20v-6"/></svg></span><span class="nav-label">今日使用画像</span></button>
+                    <button class="nav-btn" data-page="priority-log" role="tab" aria-selected="false" title="new 优先级调整"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h7"/><path d="M16 12l4 3-4 3"/></svg></span><span class="nav-label">new 优先级调整</span></button>
                     <button class="nav-btn" data-page="add" role="tab" aria-selected="false" title="添加渠道"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><span class="nav-label">添加渠道</span></button>
                     <button class="nav-btn" data-page="settings" role="tab" aria-selected="false" title="设置"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg></span><span class="nav-label">设置</span></button>
             </nav>
@@ -513,6 +514,384 @@ root.addEventListener('mask-channel-urls-change',()=>render());root.addEventList
         {% endraw %}
 
 
+        <section id="page-today-usage" class="page" role="tabpanel" aria-label="今日使用画像">
+            <style>
+                #page-today-usage {
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                    color: var(--text);
+                }
+                .usage-summary-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    gap: 16px;
+                    margin-bottom: 24px;
+                }
+                .usage-stat-card {
+                    background: var(--card-bg, #fff);
+                    border: 1px solid var(--border);
+                    border-radius: var(--radius, 12px);
+                    padding: 18px 20px;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+                }
+                .usage-stat-card .label {
+                    font-size: 13px;
+                    color: var(--muted, #64748b);
+                    font-weight: 500;
+                    margin-bottom: 6px;
+                }
+                .usage-stat-card .val {
+                    font-size: 28px;
+                    font-weight: 700;
+                    font-feature-settings: "tnum" 1;
+                    letter-spacing: -0.02em;
+                }
+                .usage-stat-card .sub {
+                    font-size: 12px;
+                    color: var(--muted, #94a3b8);
+                    margin-top: 4px;
+                }
+                .usage-table-card {
+                    background: var(--card-bg, #fff);
+                    border: 1px solid var(--border);
+                    border-radius: var(--radius, 12px);
+                    padding: 20px;
+                    margin-bottom: 24px;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+                }
+                .usage-table-card h2 {
+                    font-size: 17px;
+                    font-weight: 600;
+                    margin: 0 0 4px;
+                }
+                .usage-table-card .desc {
+                    font-size: 13px;
+                    color: var(--muted, #64748b);
+                    margin-bottom: 16px;
+                }
+                .usage-tbl-wrap {
+                    overflow-x: auto;
+                }
+                .usage-tbl {
+                    width: 100%;
+                    border-collapse: collapse;
+                    font-size: 13.5px;
+                    text-align: left;
+                }
+                .usage-tbl th {
+                    background: var(--th-bg, #f8fafc);
+                    color: var(--muted, #64748b);
+                    font-weight: 600;
+                    padding: 10px 10px;
+                    border-bottom: 1px solid var(--border);
+                    white-space: nowrap;
+                }
+                .usage-tbl td {
+                    padding: 11px 10px;
+                    border-bottom: 1px solid var(--border);
+                    font-feature-settings: "tnum" 1;
+                    white-space: nowrap;
+                }
+                .usage-tbl tr:last-child td {
+                    border-bottom: none;
+                }
+                .usage-tbl tr:hover td {
+                    background: var(--hover-bg, rgba(0,0,0,0.015));
+                }
+                .badge-cache {
+                    display: inline-block;
+                    padding: 2px 8px;
+                    border-radius: 6px;
+                    font-size: 12px;
+                    font-weight: 600;
+                }
+                .cache-high { background: rgba(52, 199, 89, 0.12); color: #28a745; }
+                .cache-mid { background: rgba(0, 122, 255, 0.12); color: #007aff; }
+                .cache-low { background: rgba(142, 142, 147, 0.12); color: #666; }
+            
+                .iq-model-select {
+                    appearance: none;
+                    -webkit-appearance: none;
+                    background: transparent;
+                    border: 1px solid var(--border);
+                    border-radius: 6px;
+                    padding: 3px 18px 3px 6px;
+                    font-size: 11px;
+                    font-weight: 600;
+                    color: var(--text);
+                    cursor: pointer;
+                    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+                    background-repeat: no-repeat;
+                    background-position: right 5px center;
+                    max-width: 105px;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+                .iq-model-select:focus {
+                    outline: none;
+                    border-color: var(--primary, #007aff);
+                }
+                .iq-timeline {
+                    display: inline-flex !important;
+                    flex-flow: row nowrap !important;
+                    align-items: flex-end !important;
+                    gap: 2px !important;
+                    height: 18px !important;
+                    width: 160px !important;
+                    max-width: 160px !important;
+                    min-width: 160px !important;
+                    padding: 0 !important;
+                    background: transparent !important;
+                    overflow: hidden !important;
+                    vertical-align: middle !important;
+                }
+                .iq-tick {
+                    display: block !important;
+                    flex: 0 0 9px !important;
+                    width: 9px !important;
+                    min-width: 9px !important;
+                    max-width: 9px !important;
+                    height: 4px !important;
+                    max-height: 4px !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    border: none !important;
+                    box-sizing: border-box !important;
+                    border-radius: 2px !important;
+                    background: #dfe4eb !important;
+                    cursor: pointer !important;
+                    transition: opacity 0.15s;
+                }
+                .iq-tick:hover {
+                    opacity: 0.7 !important;
+                }
+                .iq-tick.iq-empty {
+                    height: 4px !important;
+                    max-height: 4px !important;
+                    background: #dfe4eb !important;
+                    padding: 0 !important;
+                    border: none !important;
+                }
+                .iq-tick.green {
+                    height: 18px !important;
+                    max-height: 18px !important;
+                    background: #2fbf63 !important;
+                    padding: 0 !important;
+                    border: none !important;
+                }
+                .iq-tick.yellow {
+                    height: 12px !important;
+                    max-height: 12px !important;
+                    background: #f59e0b !important;
+                    padding: 0 !important;
+                    border: none !important;
+                }
+                .iq-tick.red {
+                    height: 6px !important;
+                    max-height: 6px !important;
+                    background: #e53935 !important;
+                    padding: 0 !important;
+                    border: none !important;
+                }
+
+                /* Channel name single-line protection */
+                #page-channel-monitor .name,
+                #page-channel-monitor .compact-name strong,
+                .ch-name,
+                .usage-tbl td strong,
+                .channel-ownership-name strong {
+                    white-space: nowrap !important;
+                    word-break: keep-all !important;
+                    overflow: hidden !important;
+                    text-overflow: ellipsis !important;
+                    max-width: 100% !important;
+                }
+                #page-channel-monitor .card-head > div:first-child {
+                    min-width: 0 !important;
+                    overflow: hidden !important;
+                    padding-right: 12px !important;
+                }
+                .iq-switch {
+                    position: relative;
+                    display: inline-block;
+                    width: 28px;
+                    height: 16px;
+                    vertical-align: middle;
+                }
+                .iq-switch input { opacity: 0; width: 0; height: 0; }
+                .iq-slider {
+                    position: absolute;
+                    cursor: pointer;
+                    inset: 0;
+                    background-color: #cbd5e1;
+                    transition: .2s;
+                    border-radius: 16px;
+                }
+                .iq-slider:before {
+                    position: absolute;
+                    content: "";
+                    height: 12px;
+                    width: 12px;
+                    left: 2px;
+                    bottom: 2px;
+                    background-color: white;
+                    transition: .2s;
+                    border-radius: 50%;
+                }
+                .iq-switch input:checked + .iq-slider { background-color: #34c759; }
+                .iq-switch input:checked + .iq-slider:before { transform: translateX(12px); }
+                .iq-switch input:disabled + .iq-slider { opacity: 0.35; cursor: not-allowed; }
+                .iq-modal-overlay {
+                    position: fixed;
+                    inset: 0;
+                    background: rgba(0,0,0,0.4);
+                    backdrop-filter: blur(4px);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 9999;
+                }
+                .iq-modal-card {
+                    background: var(--card-bg, #fff);
+                    border: 1px solid var(--border);
+                    border-radius: 14px;
+                    padding: 24px;
+                    max-width: 500px;
+                    width: 90%;
+                    box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+                }
+                .iq-modal-card h3 {
+                    margin: 0 0 12px;
+                    font-size: 17px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                }
+                .iq-modal-row {
+                    display: flex;
+                    justify-content: space-between;
+                    margin-bottom: 8px;
+                    font-size: 13.5px;
+                }
+                .iq-modal-row .k { color: var(--muted, #64748b); }
+                .iq-modal-row .v { font-weight: 600; }
+                .iq-modal-box {
+                    background: #f8fafc;
+                    border: 1px solid var(--border);
+                    border-radius: 8px;
+                    padding: 10px 12px;
+                    margin-top: 12px;
+                    font-size: 12.5px;
+                    line-height: 1.5;
+                    max-height: 180px;
+                    overflow-y: auto;
+                    color: var(--text);
+                    word-break: break-all;
+                }
+
+            </style>
+            <div class="page-toolbar">
+                <div>
+                    <h1>今日使用画像</h1>
+                    <div class="sub">New 分组消耗、各上游渠道分流、缓存命中率与延迟全景监控</div>
+                </div>
+                <div class="toolbar-actions">
+                    <span id="usageUpdateTime" class="hint">更新于 —</span>
+                    <button class="btn btn-primary" type="button" id="btnRefreshTodayUsage" onclick="loadTodayUsage(true)">刷新数据</button>
+                </div>
+            </div>
+
+            <!-- KPI Summary Cards -->
+            <div class="usage-summary-grid">
+                <div class="usage-stat-card">
+                    <div class="label">今日总调度请求</div>
+                    <div class="val" id="sumTotalReqs">—</div>
+                    <div class="sub">含所有分组调度</div>
+                </div>
+                <div class="usage-stat-card">
+                    <div class="label">今日总吞吐 Token</div>
+                    <div class="val" id="sumTotalTokens" style="color:var(--primary, #007aff)">—</div>
+                    <div class="sub" id="sumTokensSub">Prompt + Completion</div>
+                </div>
+                <div class="usage-stat-card">
+                    <div class="label">今日命中缓存 Token</div>
+                    <div class="val" id="sumTotalCache" style="color:#28a745">—</div>
+                    <div class="sub" id="sumCacheRate">综合缓存率: —</div>
+                </div>
+                <div class="usage-stat-card">
+                    <div class="label">活跃分组 / 渠道</div>
+                    <div class="val" id="sumActiveCounts">—</div>
+                    <div class="sub">今日产生调用的实体数</div>
+                </div>
+            </div>
+
+            <!-- Group Usage Table -->
+            <div class="usage-table-card">
+                <h2>New 分组使用画像</h2>
+                <div class="desc">按分组统计用户请求量、总 Token 消耗及 Prompt 缓存命中表现</div>
+                <div class="usage-tbl-wrap">
+                    <table class="usage-tbl" id="groupUsageTable">
+                        <thead>
+                            <tr>
+                                <th>分组名称</th>
+                                <th style="text-align:right">调用次数</th>
+                                <th style="text-align:right">承载 Token</th>
+                                <th style="text-align:right">输入 / 输出</th>
+                                <th style="text-align:right">缓存 Token</th>
+                                <th>缓存命中率</th>
+                                <th style="text-align:right;padding-right:16px;">今日消耗</th>
+                            </tr>
+                        </thead>
+                        <tbody id="groupUsageTbody">
+                            <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">正在读取分组统计…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Channel Usage Table -->
+            <div class="usage-table-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
+                    <div>
+                        <h2 style="margin:0;font-size:18px;">各渠道分流画像</h2>
+                        <div class="desc" style="margin:2px 0 0;font-size:12.5px;color:var(--muted)">今日各上游渠道实际承载的 Token 吞吐、请求次数、缓存率与平均响应延迟</div>
+                    </div>
+                    <div style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(0,122,255,0.05);border:1px solid rgba(0,122,255,0.18);border-radius:8px;padding:4px 10px;">
+                        <span style="font-size:12px;font-weight:600;color:var(--primary,#007aff);white-space:nowrap;">⚡ 一键改 GPT 检测模型:</span>
+                        <select id="batchGptModelSelect" style="padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface,#fff);color:var(--text);outline:none;cursor:pointer;">
+                            <option value="gpt-5.6-sol" selected>gpt-5.6-sol (推荐)</option>
+                            <option value="gpt-5.5">gpt-5.5</option>
+                            <option value="gpt-5.6-terra">gpt-5.6-terra</option>
+                            <option value="gpt-6-astra">gpt-6-astra</option>
+                            <option value="codex-auto-review">codex-auto-review</option>
+                            <option value="__custom__">自定义输入模型…</option>
+                        </select>
+                        <button class="btn btn-primary" type="button" id="btnBatchGptModel" style="padding:4px 10px;font-size:12px;white-space:nowrap;" onclick="batchApplyGptModel()">应用全部 GPT 渠道</button>
+                    </div>
+                </div>
+                <div class="usage-tbl-wrap">
+                    <table class="usage-tbl" id="channelUsageTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>渠道名称</th>
+                                <th style="text-align:right">分流请求</th>
+                                <th style="text-align:right">承载 Token</th>
+                                <th>缓存命中率</th>
+                                <th style="text-align:right">今日消耗</th>
+                                <th style="text-align:right">平均延迟</th>
+                                <th>检测模型</th>
+                                <th style="text-align:center">整点智商检测 (12条)</th>
+                                <th style="text-align:right;padding-right:12px;">智商检测操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="channelUsageTbody">
+                            <tr><td colspan="10" style="text-align:center;padding:24px;color:var(--muted)">正在读取渠道分流…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+        
         <section id="page-priority-log" class="page" role="tabpanel" aria-label="new 优先级调整">
             <div class="page-toolbar">
                 <div>
@@ -1096,6 +1475,7 @@ root.addEventListener('mask-channel-urls-change',()=>render());root.addEventList
         if (page === 'scanner') loadScanner();
         if (page === 'probe') loadProbePage();
         if (page === 'priority-log') loadPriorityLog();
+        if (page === 'today-usage') loadTodayUsage();
         if (page === 'account' && params) showAccountDetail(params.id);
     }
 
@@ -4415,6 +4795,365 @@ function getCategoryTag(cat) {
     })();
 
     })();
-    </script>
+    
+    // ---------- 今日使用画像 & 智商检测加载器 ----------
+    let _iqStateData = null;
+    let _iqChannelModels = {};
+
+    async function loadTodayUsage(force) {
+        const btn = document.getElementById('btnRefreshTodayUsage');
+        if (btn) btn.disabled = true;
+        try {
+            // 并行拉取统计数据和智商检测状态
+            const [uRes, iqRes] = await Promise.all([
+                fetch('/api/analytics/today-usage' + (force ? '?force=1' : '')),
+                fetch('/api/iq-check/state')
+            ]);
+            const uJson = await uRes.json();
+            const iqJson = await iqRes.json();
+
+            if (iqJson.success && iqJson.data) {
+                _iqStateData = iqJson.data.state || {};
+                _iqStateData.monitor_enabled = iqJson.data.monitor_enabled || {};
+                _iqChannelModels = iqJson.data.channel_models || {};
+            }
+
+            if (!uJson.success || !uJson.data) {
+                alert('加载失败: ' + (uJson.message || '未知错误'));
+                return;
+            }
+            renderTodayUsage(uJson.data);
+        } catch (e) {
+            console.error('loadTodayUsage failed', e);
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
+    function renderTodayUsage(data) {
+        window._lastTodayUsageData = data;
+        const s = data.summary || {};
+        const safeText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        safeText('sumTotalReqs', (s.total_requests || 0).toLocaleString() + ' 次');
+        safeText('sumTotalTokens', (s.total_tokens_m || 0).toFixed(2) + ' M');
+        safeText('sumTotalCache', (s.total_cache_m || 0).toFixed(2) + ' M');
+        safeText('sumCacheRate', '综合缓存率: ' + (s.overall_cache_rate || 0).toFixed(1) + '%');
+        safeText('sumActiveCounts', (s.active_groups_count || 0) + ' 组 / ' + (s.active_channels_count || 0) + ' 渠道');
+        safeText('usageUpdateTime', '更新于 ' + (s.updated_at || '刚刚'));
+
+        const esc = (str) => {
+            if (str == null) return '';
+            return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]);
+        };
+
+        // Groups
+        const gtbody = document.getElementById('groupUsageTbody');
+        if (gtbody) {
+            if (!data.groups || !data.groups.length) {
+                gtbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted)">今日暂无分组调用数据</td></tr>';
+            } else {
+                gtbody.innerHTML = data.groups.map(g => {
+                    let badgeClass = 'cache-low';
+                    let barColor = '#8e8e93';
+                    if (g.cache_rate >= 80) { badgeClass = 'cache-high'; barColor = '#34c759'; }
+                    else if (g.cache_rate >= 50) { badgeClass = 'cache-mid'; barColor = '#007aff'; }
+                    const gCost = (g.quota / 500000).toFixed(2);
+                    return `<tr>
+                        <td><strong>${esc(g.group)}</strong></td>
+                        <td style="text-align:right">${g.requests.toLocaleString()} 次</td>
+                        <td style="text-align:right"><strong>${g.total_tokens_m.toFixed(2)} M</strong></td>
+                        <td style="text-align:right;color:var(--muted);font-size:12px">${g.prompt_tokens_m.toFixed(2)} M / ${g.completion_tokens_m.toFixed(2)} M</td>
+                        <td style="text-align:right">${g.cache_tokens_m.toFixed(2)} M</td>
+                        <td>
+                            <div style="display:inline-flex;align-items:center;gap:6px;">
+                                <span class="badge-cache ${badgeClass}">${g.cache_rate.toFixed(1)}%</span>
+                                <div style="width:48px;height:5px;background:rgba(120,120,128,0.15);border-radius:3px;overflow:hidden;flex-shrink:0;" title="缓存率: ${g.cache_rate.toFixed(1)}%">
+                                    <div style="width:${Math.min(100, Math.max(0, g.cache_rate))}%;height:100%;background:${barColor};border-radius:3px;"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td style="text-align:right;font-weight:600;color:var(--text);padding-right:16px;">$${gCost}</td>
+                    </tr>`;
+                }).join('');
+            }
+        }
+
+        // Channels Table with IQ Ticks
+        const ctbody = document.getElementById('channelUsageTbody');
+        if (ctbody) {
+            if (!data.channels || !data.channels.length) {
+                ctbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--muted)">今日暂无渠道分流数据</td></tr>';
+            } else {
+                const iqChannels = (_iqStateData && _iqStateData.channels) || (window._iqStateData && window._iqStateData.channels) || {};
+                ctbody.innerHTML = data.channels.map(c => {
+                    let badgeClass = 'cache-low';
+                    if (c.cache_rate >= 80) badgeClass = 'cache-high';
+                    else if (c.cache_rate >= 50) badgeClass = 'cache-mid';
+
+                    const cidStr = String(c.id);
+                    const chConf = iqChannels[cidStr] || {};
+                    const isEnabled = chConf.enabled !== false;
+                    const availableModels = _iqChannelModels[cidStr] || (window._iqChannelModels && window._iqChannelModels[cidStr]) || [];
+                    const selModel = chConf.selected_model || (availableModels.includes('gpt-5.6-sol') ? 'gpt-5.6-sol' : (availableModels[0] || 'gpt-5.6-sol'));
+
+                    // Model select with dropdown
+                    const modelOpts = availableModels.map(m => `<option value="${esc(m)}" ${m === selModel ? 'selected' : ''}>${esc(m)}</option>`).join('');
+                    const selectHtml = `<select class="iq-model-select" onchange="onIqModelChange(${c.id}, this.value)">
+                        ${modelOpts || `<option value="${esc(selModel)}">${esc(selModel)}</option>`}
+                    </select>`;
+
+                    // 12 ticks timeline (展示最近12次检测，每块10px窄条+2px间距，填满160px)
+                    const totalTicks = 12;
+                    const allHist = chConf.history || [];
+                    const hist = allHist.slice(-totalTicks);
+                    const padCount = Math.max(0, totalTicks - hist.length);
+                    let ticksHtml = '';
+                    for (let i = 0; i < padCount; i++) {
+                        ticksHtml += `<i class="iq-tick iq-empty" style="display:inline-block;flex:0 0 9px;width:9px;min-width:9px;max-width:9px;height:4px;background:#dfe4eb;border-radius:2px;margin:0 1px;padding:0;border:none;box-sizing:border-box;vertical-align:bottom;" title="待检测"></i>`;
+                    }
+                    hist.forEach((item, idx) => {
+                        const statusClass = item.status || 'red';
+                        const tip = `${item.at || ''} · 答案: ${item.answer != null ? item.answer : '无'} · 耗时: ${item.duration || 0}s`;
+                        let hBg = '#e53935'; let hH = '6px';
+                        if (statusClass === 'green') { hBg = '#2fbf63'; hH = '18px'; }
+                        else if (statusClass === 'yellow') { hBg = '#f59e0b'; hH = '12px'; }
+                        ticksHtml += `<i class="iq-tick ${statusClass}" style="display:inline-block;flex:0 0 9px;width:9px;min-width:9px;max-width:9px;height:${hH};background:${hBg};border-radius:2px;margin:0 1px;padding:0;border:none;box-sizing:border-box;cursor:pointer;vertical-align:bottom;" title="${esc(tip)}" onclick="showIqDetail(${c.id}, ${idx})"></i>`;
+                    });
+
+                    // Follow channel availability monitor switch
+                    const monMap = (_iqStateData && _iqStateData.monitor_enabled) || (window._iqStateData && window._iqStateData.monitor_enabled) || {};
+                    const isMonActive = Boolean(monMap[cidStr]);
+
+                    // Independent channel IQ toggle:
+                    // If not explicitly set in chConf.enabled, defaults to true (follows availability)
+                    const isIqExplicitlyDisabled = Boolean(chConf && chConf.enabled === false);
+                    const isIqRunning = isMonActive && !isIqExplicitlyDisabled;
+
+                    let statusBadge = '';
+                    let switchChecked = '';
+                    let switchDisabled = '';
+                    let switchTitle = '';
+
+                    if (!isMonActive) {
+                        statusBadge = `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);background:rgba(120,120,128,0.12);padding:2px 6px;border-radius:4px;white-space:nowrap"><span style="width:6px;height:6px;border-radius:50%;background:#8e8e93"></span>已跟随停用</span>`;
+                        switchChecked = '';
+                        switchDisabled = 'disabled';
+                        switchTitle = '渠道可用性监控已停用，智商检测跟随停用';
+                    } else if (isIqExplicitlyDisabled) {
+                        statusBadge = `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#8e8e93;background:rgba(120,120,128,0.12);padding:2px 6px;border-radius:4px;white-space:nowrap"><span style="width:6px;height:6px;border-radius:50%;background:#8e8e93"></span>智商已关</span>`;
+                        switchChecked = '';
+                        switchTitle = '已单独关闭该渠道智商检测（不自动测试）';
+                    } else {
+                        statusBadge = `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#34c759;background:rgba(52,199,89,0.12);padding:2px 6px;border-radius:4px;font-weight:600;white-space:nowrap"><span style="width:6px;height:6px;border-radius:50%;background:#34c759"></span>监控中</span>`;
+                        switchChecked = 'checked';
+                        switchTitle = '智商检测正常运行中，点击可单独关闭';
+                    }
+
+                    const switchHtml = `<label class="iq-switch" style="width:28px;height:16px;margin:0;" title="${switchTitle}">
+                        <input type="checkbox" ${switchChecked} ${switchDisabled} onchange="onIqToggleChange(${c.id}, this.checked)">
+                        <span class="iq-slider" style="border-radius:16px;"></span>
+                    </label>`;
+
+                    const opHtml = `<div style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">
+                        ${switchHtml}
+                        ${statusBadge}
+                        <button class="btn btn-ghost" id="btnIqTest_${c.id}" style="padding:2px 8px;font-size:11px;min-width:32px;transition:all .15s ease;" title="立即手动测试一次智商" onclick="runIqTestNow(${c.id}, this)">测</button>
+                    </div>`;
+
+                    // 只有在既未跟随停用、且未单独关闭智商检测时，才展示时间轴色块；否则完全留白！
+                    const timelineHtml = isIqRunning 
+                        ? `<div class="iq-timeline" style="display:inline-flex;flex-flow:row nowrap;align-items:flex-end;width:140px;height:18px;gap:2px;overflow:hidden;">${ticksHtml}</div>`
+                        : '';
+
+                    let barColor = '#8e8e93';
+                    if (c.cache_rate >= 80) barColor = '#34c759';
+                    else if (c.cache_rate >= 50) barColor = '#007aff';
+                    const cCost = (c.quota / 500000).toFixed(2);
+
+                    return `<tr>
+                        <td style="color:var(--muted)">#${c.id}</td>
+                        <td><strong>${esc(c.name)}</strong></td>
+                        <td style="text-align:right">${c.requests.toLocaleString()}</td>
+                        <td style="text-align:right"><strong>${c.total_tokens_m.toFixed(2)} M</strong></td>
+                        <td>
+                            <div style="display:inline-flex;align-items:center;gap:6px;">
+                                <span class="badge-cache ${badgeClass}">${c.cache_rate.toFixed(1)}%</span>
+                                <div style="width:36px;height:5px;background:rgba(120,120,128,0.15);border-radius:3px;overflow:hidden;flex-shrink:0;" title="缓存率: ${c.cache_rate.toFixed(1)}%">
+                                    <div style="width:${Math.min(100, Math.max(0, c.cache_rate))}%;height:100%;background:${barColor};border-radius:3px;"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td style="text-align:right;font-weight:600;color:var(--text);">$${cCost}</td>
+                        <td style="text-align:right"><span style="font-weight:500">${c.avg_latency_s.toFixed(2)}s</span></td>
+                        <td style="white-space:nowrap">${selectHtml}</td>
+                        <td style="text-align:center;width:150px;min-width:150px;max-width:150px;padding:6px 2px;">${timelineHtml}</td>
+                        <td style="text-align:right;white-space:nowrap;padding-right:12px;">
+                            <div style="display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;width:100%;white-space:nowrap">
+                                ${switchHtml}
+                                ${statusBadge}
+                                <button class="btn btn-ghost" id="btnIqTest_${c.id}" style="padding:2px 7px;font-size:11px;min-width:30px;transition:all .15s ease;" title="立即手动测试一次智商" onclick="runIqTestNow(${c.id}, this)">测</button>
+                            </div>
+                        </td>
+                    </tr>`;
+                }).join('');
+            }
+        }
+    }
+
+    // ---------- 智商检测交互处理函数 ----------
+    async function onIqModelChange(cid, model) {
+        try {
+            await fetch(`/api/iq-check/channel/${cid}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ selected_model: model })
+            });
+            if (_iqStateData && _iqStateData.channels && _iqStateData.channels[String(cid)]) {
+                _iqStateData.channels[String(cid)].selected_model = model;
+            }
+        } catch (e) {
+            alert('保存模型失败: ' + e.message);
+        }
+    }
+
+    async function onIqToggleChange(cid, enabled) {
+        const cidStr = String(cid);
+        if (!_iqStateData) _iqStateData = {};
+        if (!_iqStateData.channels) _iqStateData.channels = {};
+        if (!_iqStateData.channels[cidStr]) _iqStateData.channels[cidStr] = {};
+        _iqStateData.channels[cidStr].enabled = enabled;
+
+        // 瞬间重新渲染，毫秒级即时反馈视觉与留白
+        if (window._lastTodayUsageData) {
+            renderTodayUsage(window._lastTodayUsageData);
+        }
+
+        try {
+            const resp = await fetch(`/api/iq-check/channel/${cid}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: enabled })
+            });
+            const d = await resp.json();
+            if (!d.success) {
+                alert('切换开关失败: ' + (d.message || '未知错误'));
+            }
+        } catch (e) {
+            alert('切换开关失败: ' + e.message);
+        }
+    }
+
+    async function runIqTestNow(cid, btnEl) {
+        const btn = btnEl || document.getElementById(`btnIqTest_${cid}`);
+        const originalHtml = btn ? btn.innerHTML : '测';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = `<span style="display:inline-flex;align-items:center;gap:3px;color:#007aff;font-weight:600;"><span style="width:7px;height:7px;border:1.5px solid #007aff;border-top-color:transparent;border-radius:50%;display:inline-block;animation:spin .8s linear infinite;"></span>检测中…</span>`;
+            btn.style.borderColor = 'rgba(0,122,255,0.4)';
+            btn.style.background = 'rgba(0,122,255,0.06)';
+        }
+
+        const cidStr = String(cid);
+        const selModel = (_iqStateData && _iqStateData.channels && _iqStateData.channels[cidStr] && _iqStateData.channels[cidStr].selected_model) || null;
+        try {
+            const res = await fetch(`/api/iq-check/run/${cid}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: selModel })
+            });
+            const d = await res.json();
+            if (d.success && d.data) {
+                const resData = d.data;
+                const statusName = resData.status === 'green' ? '正确 (绿 21)' : (resData.status === 'yellow' ? '差一巧合 (黄 29)' : '错误 (红)');
+                alert(`渠道 #${cid} 手动检测完成！\n模型: ${resData.model || selModel || '默认'}\n答案: ${resData.answer != null ? resData.answer : '无'}\n判定: ${statusName}\n思考强度: ${resData.effort || '自适应'}\n耗时: ${resData.duration}s`);
+                await loadTodayUsage(true);
+            } else {
+                alert('检测失败: ' + (d.message || '未知错误'));
+            }
+        } catch (e) {
+            alert('请求失败: ' + e.message);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                btn.style.borderColor = '';
+                btn.style.background = '';
+            }
+        }
+    }
+
+    async function batchApplyGptModel() {
+        const sel = document.getElementById('batchGptModelSelect');
+        const btn = document.getElementById('btnBatchGptModel');
+        if (!sel || !btn) return;
+
+        let targetModel = sel.value;
+        if (targetModel === '__custom__') {
+            targetModel = prompt('请输入要批量应用的 GPT 检测模型名称：', 'gpt-5.6-sol');
+            if (!targetModel || !targetModel.trim()) return;
+            targetModel = targetModel.trim();
+        }
+
+        btn.disabled = true;
+        const originalText = btn.textContent;
+        btn.textContent = '正在应用…';
+
+        try {
+            const resp = await fetch('/api/iq-check/batch-model-gpt', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: targetModel })
+            });
+            const d = await resp.json();
+            if (d.success) {
+                alert(`成功！已将全部 ${d.count} 个 GPT 渠道的智商检测模型一键更改为：${d.model}`);
+                await loadTodayUsage(true);
+            } else {
+                alert('批量修改失败: ' + (d.message || '未知错误'));
+            }
+        } catch (e) {
+            alert('请求失败: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = originalText;
+        }
+    }
+
+    function showIqDetail(cid, histIdx) {
+        const cidStr = String(cid);
+        const hist = (_iqStateData && _iqStateData.channels && _iqStateData.channels[cidStr] && _iqStateData.channels[cidStr].history) || [];
+        const item = hist[histIdx];
+        if (!item) return;
+
+        let statusText = '错误 / 异常';
+        let color = '#ff3b30';
+        if (item.status === 'green') {
+            statusText = '正确 (完全正确)';
+            color = '#34c759';
+        } else if (item.status === 'yellow') {
+            statusText = '差一反例/部分逻辑 (显示黄 29)';
+            color = '#ff9500';
+        }
+
+        const modal = document.createElement('div');
+        modal.className = 'iq-modal-overlay';
+        modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+        modal.innerHTML = `
+            <div class="iq-modal-card">
+                <h3><span>🧠 糖果题目检测详情</span> <button style="border:none;background:none;font-size:18px;cursor:pointer" onclick="this.closest('.iq-modal-overlay').remove()">✕</button></h3>
+                <div class="iq-modal-row"><span class="k">渠道编号</span><span class="v">#${cid}</span></div>
+                <div class="iq-modal-row"><span class="k">检测时间</span><span class="v">${item.at || '未知'}</span></div>
+                <div class="iq-modal-row"><span class="k">测试模型</span><span class="v">${item.model || '-'}</span></div>
+                <div class="iq-modal-row"><span class="k">响应耗时</span><span class="v">${item.duration || 0} 秒</span></div>
+                <div class="iq-modal-row"><span class="k">模型最终输出答案</span><span class="v" style="font-size:16px;color:${color}">${item.answer != null ? item.answer : '未提取到数字'}</span></div>
+                <div class="iq-modal-row"><span class="k">判定结论</span><span class="v" style="color:${color}">${statusText}</span></div>
+                <div style="font-size:12px;color:var(--muted);margin-top:12px;font-weight:600">模型回答摘要 / 最终输出：</div>
+                <div class="iq-modal-box">${(item.summary || '无回答内容').replace(/\n/g, '<br>')}</div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+</script>
 </body>
 </html>

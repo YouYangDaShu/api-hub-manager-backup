@@ -8,14 +8,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import os
 import re
-import secrets
 import sqlite3
-from functools import cmp_to_key
 import time
+import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta
+from functools import cmp_to_key
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +36,18 @@ ADMIN_TOKEN = os.getenv("CHANNEL_MONITOR_TOKEN", "")
 DEFAULT_MONITOR_MODEL = "gpt-5.6-terra"
 MAX_ACTION_LOG = 2000
 router = APIRouter(prefix="/channel-monitor", tags=["channel-monitor"])
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Reject redirects so the New API PAT never crosses origins."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, msg, headers, fp)
+
+
+def _open_newapi(request: urllib.request.Request, timeout: float):
+    return urllib.request.build_opener(_NoRedirectHandler).open(request, timeout=timeout)
+
 
 # Stable keys are persisted in data/settings.json; labels are presentation-only.
 COMBINATION_OPTIONS: tuple[dict[str, str], ...] = (
@@ -748,34 +762,6 @@ def classify_channel(item: dict[str, Any]) -> str:
     return "other"
 
 
-def load_key(channel_id: int) -> str:
-    con = db_connect()
-    try:
-        row = con.execute("SELECT key FROM channels WHERE id=?", (channel_id,)).fetchone()
-    finally:
-        con.close()
-    raw = row[0] if row else ""
-    return next((line.strip() for line in str(raw).splitlines() if line.strip()), "")
-
-
-def fetch_upstream_models(channel_id: int) -> list[str]:
-    con = db_connect()
-    try:
-        row = con.execute("SELECT base_url FROM channels WHERE id=?", (channel_id,)).fetchone()
-    finally:
-        con.close()
-    if not row:
-        return []
-    key = load_key(channel_id)
-    req = urllib.request.Request(
-        (row[0] or "").rstrip("/") + "/v1/models",
-        headers={"Authorization": "Bearer " + key, "User-Agent": "new-api-channel-monitor/1.0"},
-    )
-    with urllib.request.urlopen(req, timeout=20) as response:
-        data = json.loads(response.read(1024 * 1024))
-    return [str(x.get("id")) for x in data.get("data", []) if isinstance(x, dict) and x.get("id")]
-
-
 def save_monitor_settings(
     channel_id: int,
     enabled: bool | None = None,
@@ -849,50 +835,58 @@ def list_channels() -> list[dict[str, Any]]:
 
 def run_check(channel: dict[str, Any]) -> dict[str, Any]:
     started = time.perf_counter()
-    base = (channel.get("base_url") or "").rstrip("/")
     model = channel.get("monitor_model") or DEFAULT_MONITOR_MODEL
-    key = load_key(int(channel["id"]))
-    if not channel.get("monitor_model_saved"):
-        try:
-            upstream_models = fetch_upstream_models(int(channel["id"]))
-            if model not in upstream_models and upstream_models:
-                model = upstream_models[0]
-                save_monitor_settings(int(channel["id"]), model=model)
-        except Exception as exc:  # upstream errors are rendered as monitor failures
-            return {
-                "last_ok": False, "last_http": getattr(exc, "code", None), "last_latency_ms": 0,
-                "last_message": f"首次拉取模型失败: {str(exc)[:140]}", "last_model": model,
-                "last_checked_at": datetime.now().astimezone().isoformat(),
-            }
-    a, b = secrets.randbelow(40) + 10, secrets.randbelow(40) + 10
-    payload = {
-        "model": model,
-        "messages": [{"role": "user", "content": f"只回复数字：{a}+{b}="}],
-        "max_tokens": 8, "temperature": 0, "stream": False,
+    base = os.getenv("NEWAPI_BASE_URL", "").strip().rstrip("/")
+    admin_token = os.getenv("NEWAPI_ADMIN_TOKEN", "").strip()
+    missing = [
+        name for name, value in (
+            ("NEWAPI_BASE_URL", base),
+            ("NEWAPI_ADMIN_TOKEN", admin_token),
+        ) if not value
+    ]
+    if missing:
+        return {
+            "last_ok": False, "last_http": None, "last_latency_ms": 0,
+            "last_message": f"New API 探活配置缺失: {', '.join(missing)}", "last_model": model,
+            "last_checked_at": datetime.now().astimezone().isoformat(),
+        }
+
+    query = urllib.parse.urlencode({"model": model})
+    url = f"{base}/api/channel/test/{int(channel['id'])}?{query}"
+    headers = {
+        "Authorization": "Bearer " + admin_token,
+        "Accept": "application/json",
+        "User-Agent": "new-api-channel-monitor/1.0",
     }
-    headers = {"User-Agent": "new-api-channel-monitor/1.0", "Content-Type": "application/json"}
-    if key:
-        headers["Authorization"] = "Bearer " + key
     ok = False
     code = None
     message = ""
+    latency_ms = None
     try:
-        req = urllib.request.Request(base + "/v1/chat/completions", data=json.dumps(payload).encode(), headers=headers, method="POST")
-        with urllib.request.urlopen(req, timeout=30) as response:
+        req = urllib.request.Request(url, headers=headers, method="GET")
+        with _open_newapi(req, timeout=30) as response:
             body = response.read(32768)
             code = response.status
         data = json.loads(body)
-        text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        numbers = re.findall(r"\d+", str(text))
-        ok = 200 <= code < 300 and str(a + b) in numbers
-        message = "challenge通过" if ok else f"challenge失败，返回: {str(text)[:100]}"
+        if not isinstance(data, dict):
+            raise TypeError("New API 返回格式不是对象")
+        api_time = data.get("time")
+        if isinstance(api_time, (int, float)) and not isinstance(api_time, bool) and math.isfinite(api_time) and api_time >= 0:
+            latency_ms = round(api_time * 1000)
+        ok = 200 <= code < 300 and data.get("success") is True
+        message = str(data.get("message") or ("New API 渠道测试通过" if ok else "New API 渠道测试失败"))
+    except urllib.error.HTTPError as exc:
+        code = exc.code
+        message = f"New API HTTP {exc.code}: {exc.reason}"
     except Exception as exc:
-        code = getattr(exc, "code", None)
-        message = str(exc)[:180]
+        code = getattr(exc, "code", code)
+        message = f"New API 渠道测试请求失败: {exc}"
+    if admin_token:
+        message = message.replace(admin_token, "[REDACTED]")
     return {
         "last_ok": ok, "last_http": code,
-        "last_latency_ms": round((time.perf_counter() - started) * 1000),
-        "last_message": message, "last_model": model,
+        "last_latency_ms": latency_ms if latency_ms is not None else round((time.perf_counter() - started) * 1000),
+        "last_message": message[:180], "last_model": model,
         "last_checked_at": datetime.now().astimezone().isoformat(),
     }
 

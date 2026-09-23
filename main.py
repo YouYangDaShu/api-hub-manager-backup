@@ -16,6 +16,7 @@ from fastapi.responses import HTMLResponse
 
 from routes import router, auto_refresh_loop, dashboard_cache_refresh_loop
 from channel_monitor import router as channel_monitor_router, start_monitor_task
+from iq_checker import start_iq_task
 
 DATA_DIR = Path(__file__).parent / "data"
 DATA_DIR.mkdir(exist_ok=True)
@@ -65,6 +66,7 @@ async def lifespan(app: FastAPI):
     token_refresh_task = asyncio.create_task(auto_refresh_loop())
     dashboard_refresh_task = asyncio.create_task(dashboard_cache_refresh_loop())
     monitor_stop, monitor_task = await start_monitor_task()
+    iq_stop, iq_task = await start_iq_task()
     try:
         yield
     finally:
@@ -72,6 +74,8 @@ async def lifespan(app: FastAPI):
         dashboard_refresh_task.cancel()
         monitor_stop.set()
         monitor_task.cancel()
+        iq_stop.set()
+        iq_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await token_refresh_task
         with contextlib.suppress(asyncio.CancelledError):
