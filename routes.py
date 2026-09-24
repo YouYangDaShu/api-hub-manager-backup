@@ -809,13 +809,15 @@ def _attach_site_revenue(account_summaries: list[dict[str, Any]]) -> dict[str, f
         with sqlite3.connect(f"file:{SITE_BILLING_DB}?mode=ro", uri=True) as conn:
             qpu_row = conn.execute("SELECT value FROM options WHERE key = 'QuotaPerUnit'").fetchone()
             qpu = float(qpu_row[0]) if qpu_row and float(qpu_row[0]) > 0 else 500000.0
+            log_cols = {r[1] for r in conn.execute("PRAGMA table_info(logs)").fetchall()}
+            filter_test = " AND (COALESCE(l.token_name, '') <> '模型测试' AND COALESCE(l.content, '') <> '模型测试')" if "token_name" in log_cols and "content" in log_cols else ""
             rows = conn.execute(
-                """
+                f"""
                 SELECT c.id, c.key,
                     COALESCE(SUM(CASE WHEN l.created_at >= ? AND l.created_at < ? THEN l.quota ELSE 0 END), 0),
                     COALESCE(SUM(l.quota), 0)
                 FROM logs l JOIN channels c ON c.id = l.channel_id
-                WHERE l.type = 2 AND l.quota > 0
+                WHERE l.type = 2 AND l.quota > 0{filter_test}
                 GROUP BY c.id, c.key
                 """,
                 (int(start.timestamp()), int(end.timestamp())),

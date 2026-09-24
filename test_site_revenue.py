@@ -237,4 +237,41 @@ class SiteRevenueTests(unittest.TestCase):
             self.assertEqual(totals["matched_today"], 40.0)
             self.assertEqual(totals["site_today_revenue"], 40.0)
 
+    def test_model_test_logs_are_excluded_from_site_revenue(self):
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "one-api.db"
+            ownership_path = Path(td) / "channel_ownership.json"
+            conn = sqlite3.connect(db_path)
+            conn.executescript(
+                """
+                CREATE TABLE options (key TEXT PRIMARY KEY, value TEXT);
+                CREATE TABLE channels (id INTEGER PRIMARY KEY, key TEXT);
+                CREATE TABLE logs (type INTEGER, channel_id INTEGER, quota INTEGER, created_at INTEGER, token_name TEXT, content TEXT);
+                INSERT INTO options VALUES ('QuotaPerUnit', '1000000');
+                INSERT INTO channels VALUES (10, 'sk-test-ch');
+                -- 正常业务消费 50.0
+                INSERT INTO logs VALUES (2, 10, 50000000, strftime('%s', 'now'), 'default', '');
+                -- 后台模型测试消耗 10.0（必须排除）
+                INSERT INTO logs VALUES (2, 10, 10000000, strftime('%s', 'now'), '模型测试', '模型测试');
+                """
+            )
+            conn.commit()
+            conn.close()
+            ownership_path.write_text(
+                '{"10": {"channel_id": "10", "owner_account_id": "acc-10"}}',
+                encoding="utf-8",
+            )
+            summaries = [{"id": "acc-10", "upstream_key": "sk-test-ch", "today_cost": 20.0}]
+            with patch.object(routes, "SITE_BILLING_DB", db_path), \
+                 patch.object(routes, "CHANNEL_OWNERSHIP_FILE", ownership_path), \
+                 patch.object(routes, "SITE_CHANNEL_IDS_BY_ACCOUNT", {}), \
+                 patch.object(routes, "_load_revenue_adjustments", return_value={}):
+                totals = routes._attach_site_revenue(summaries)
+
+            # 仅统计正常业务消费 50.0，排除了 10.0 的模型测试
+            self.assertEqual(summaries[0]["site_revenue"], 50.0)
+            self.assertEqual(totals["today_revenue"], 50.0)
+            self.assertEqual(totals["site_today_revenue"], 50.0)
+
+
 
