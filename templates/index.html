@@ -5428,17 +5428,20 @@ function getCategoryTag(cat) {
     
     // Expose IQ Checker functions globally on window
     window.onIqModelChange = async function(cid, model) {
+        const cidStr = String(cid);
+        if (!window._iqStateData) window._iqStateData = {};
+        if (!window._iqStateData.channels) window._iqStateData.channels = {};
+        if (!window._iqStateData.channels[cidStr]) window._iqStateData.channels[cidStr] = { enabled: true, history: [] };
+        window._iqStateData.channels[cidStr].selected_model = model;
+
         try {
             await fetch(`/api/iq-check/channel/${cid}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ selected_model: model })
             });
-            if (window._iqStateData && window._iqStateData.channels && window._iqStateData.channels[String(cid)]) {
-                window._iqStateData.channels[String(cid)].selected_model = model;
-            }
         } catch (e) {
-            alert('保存模型失败: ' + e.message);
+            console.error('保存模型失败: ', e);
         }
     };
 
@@ -5469,8 +5472,24 @@ function getCategoryTag(cat) {
     };
 
     window.runIqTestNow = async function(cid, btnEl) {
+        const cidStr = String(cid);
         const btn = btnEl || document.getElementById(`btnIqTest_${cid}`);
         const originalHtml = btn ? btn.innerHTML : '测';
+
+        // 优先直接从页面 DOM 读取当前选中的选项值
+        const selectEl = document.querySelector(`.iq-model-select[data-cid="${cid}"]`) || (btn ? btn.parentElement.querySelector('.iq-model-select') : null);
+        const domModel = (selectEl && selectEl.value) ? selectEl.value.trim() : '';
+        const cachedModel = (window._iqStateData && window._iqStateData.channels && window._iqStateData.channels[cidStr] && window._iqStateData.channels[cidStr].selected_model) || '';
+        const selModel = domModel || cachedModel || null;
+
+        // 立即固化到本地内存，防止后续页面刷新冲掉
+        if (selModel) {
+            if (!window._iqStateData) window._iqStateData = {};
+            if (!window._iqStateData.channels) window._iqStateData.channels = {};
+            if (!window._iqStateData.channels[cidStr]) window._iqStateData.channels[cidStr] = { enabled: true, history: [] };
+            window._iqStateData.channels[cidStr].selected_model = selModel;
+        }
+
         if (btn) {
             btn.disabled = true;
             btn.innerHTML = `<span style="display:inline-flex;align-items:center;gap:3px;color:#007aff;font-weight:600;"><span style="width:7px;height:7px;border:1.5px solid #007aff;border-top-color:transparent;border-radius:50%;display:inline-block;animation:spin .8s linear infinite;"></span>检测中…</span>`;
@@ -5478,8 +5497,6 @@ function getCategoryTag(cat) {
             btn.style.background = 'rgba(0,122,255,0.06)';
         }
 
-        const cidStr = String(cid);
-        const selModel = (window._iqStateData && window._iqStateData.channels && window._iqStateData.channels[cidStr] && window._iqStateData.channels[cidStr].selected_model) || null;
         try {
             const res = await fetch(`/api/iq-check/run/${cid}`, {
                 method: 'POST',

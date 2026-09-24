@@ -209,6 +209,8 @@ def run_single_iq_test(cid: int, model: str | None = None) -> dict[str, Any]:
         "selected_model": model,
         "history": []
     })
+    if model:
+        ch_map["selected_model"] = model
     hist = ch_map.setdefault("history", [])
     hist.append(res)
     ch_map["history"] = hist[-48:]
