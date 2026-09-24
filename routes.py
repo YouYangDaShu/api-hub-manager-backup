@@ -3406,7 +3406,7 @@ def get_iq_check_state():
             import channel_monitor
             for ch in channel_monitor.list_channels():
                 cid = str(ch["id"])
-                mon_enabled[cid] = bool(ch.get("monitor_enabled", True) and ch.get("category_enabled", True) and (ch.get("monitor_global_enabled") is not False))
+                mon_enabled[cid] = bool(ch.get("channel_enabled", True) and ch.get("monitor_enabled", False) and ch.get("category_enabled", True) and (ch.get("monitor_global_enabled") is not False))
         except Exception as me:
             print(f"[iq_check] error listing channels: {me}")
 

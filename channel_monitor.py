@@ -810,7 +810,7 @@ def list_channels() -> list[dict[str, Any]]:
         item["availability_24h"] = availability(history_since(history, now - timedelta(hours=24)))
         item["availability_7d"] = availability(history_since(history, now - timedelta(days=7)))
         item["channel_enabled"] = item["status"] == 1
-        item["monitor_enabled"] = saved.get("monitor_enabled", True)
+        item["monitor_enabled"] = bool(saved.get("monitor_enabled", False))
         saved_model = saved.get("monitor_model")
         item["monitor_model"] = saved_model or (
             DEFAULT_MONITOR_MODEL if DEFAULT_MONITOR_MODEL in item["models"] else (item["models"] or [""])[0]
@@ -1018,7 +1018,7 @@ async def monitor_loop(stop_event: asyncio.Event) -> None:
         try:
             if get_monitor_global_enabled():
                 for channel in list_channels():
-                    if channel["monitor_enabled"] and channel["category_enabled"]:
+                    if channel["channel_enabled"] and channel["monitor_enabled"] and channel["category_enabled"]:
                         result = await asyncio.to_thread(run_check, channel)
                         persist_check(channel["id"], result, channel)
                 config = routing_score_config()
