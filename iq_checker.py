@@ -116,13 +116,13 @@ def run_single_iq_test(cid: int, model: str | None = None) -> dict[str, Any]:
 
     # Adaptive thinking intensity tiers:
     # 1. 'max' (highest thinking effort, max_completion_tokens=4096)
-    # 2. 'high' (fallback thinking effort if 'max' not supported or times out)
+    # 2. 'high' (fallback thinking effort if 'max' not supported or fails)
     # 3. 'standard' (fallback for models that reject reasoning_effort or temperature)
-    # 给足长推理充分的推导时间（3分钟窗口，180s），避免提前切走中断深度思考
+    # 给足长推理充分的推导时间（240s）
     tiers = [
-        {"name": "max", "extra": {"reasoning_effort": "max", "max_completion_tokens": 4096}, "timeout": 180},
-        {"name": "high", "extra": {"reasoning_effort": "high", "max_completion_tokens": 4096}, "timeout": 180},
-        {"name": "standard", "extra": {"max_tokens": 4096, "temperature": 0.0}, "timeout": 120}
+        {"name": "max", "extra": {"reasoning_effort": "max", "max_completion_tokens": 4096}, "timeout": 240},
+        {"name": "high", "extra": {"reasoning_effort": "high", "max_completion_tokens": 4096}, "timeout": 240},
+        {"name": "standard", "extra": {"max_tokens": 4096, "temperature": 0.0}, "timeout": 180}
     ]
 
     t0 = time.time()
@@ -135,6 +135,7 @@ def run_single_iq_test(cid: int, model: str | None = None) -> dict[str, Any]:
         payload = {
             "model": model,
             "messages": [{"role": "user", "content": QUESTION}],
+            "stream": True,
             **tier["extra"]
         }
         req = urllib.request.Request(
@@ -148,14 +149,48 @@ def run_single_iq_test(cid: int, model: str | None = None) -> dict[str, Any]:
         )
         try:
             with urllib.request.urlopen(req, timeout=tier["timeout"]) as resp:
-                data = json.loads(resp.read().decode())
+                stream_content = []
+                stream_reasoning = []
+                stream_usage = {}
+                for raw_line in resp:
+                    line = raw_line.decode(errors="ignore").strip()
+                    if not line:
+                        continue
+                    if line.startswith("data: "):
+                        data_str = line[6:].strip()
+                        if data_str == "[DONE]":
+                            break
+                        try:
+                            chunk = json.loads(data_str)
+                            if "usage" in chunk and chunk["usage"]:
+                                stream_usage = chunk["usage"]
+                            c_list = chunk.get("choices", [])
+                            if c_list:
+                                delta = c_list[0].get("delta", {})
+                                c_piece = delta.get("content") or ""
+                                if c_piece:
+                                    stream_content.append(str(c_piece))
+                                r_piece = delta.get("reasoning_content") or delta.get("reasoning") or delta.get("thought") or ""
+                                if r_piece:
+                                    stream_reasoning.append(str(r_piece))
+                        except Exception:
+                            continue
                 used_effort = tier["name"]
+                data = {
+                    "choices": [{
+                        "message": {
+                            "content": "".join(stream_content),
+                            "reasoning_content": "".join(stream_reasoning)
+                        }
+                    }],
+                    "usage": stream_usage
+                }
                 break
         except urllib.error.HTTPError as he:
             err_body = he.read().decode(errors="ignore")
             last_err_msg = f"HTTP {he.code}: {err_body[:100]}"
-            # If 400 Bad Request regarding reasoning_effort or unsupported options, downgrade
-            if he.code == 400 and idx < len(tiers) - 1:
+            # If 400 Bad Request or 502 Upstream/Gateway error during thinking, downgrade tier
+            if he.code in (400, 502) and idx < len(tiers) - 1:
                 continue
             break
         except Exception as te:

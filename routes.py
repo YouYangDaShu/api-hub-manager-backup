@@ -81,6 +81,8 @@ class SettingsUpdate(BaseModel):
     smtp_alert_recipients: str | None = None
     smtp_alert_cooldown_hours: float | None = None
     smtp_alert_max_repeats: int | None = None
+    smtp_alert_critical_threshold: float | None = None
+    smtp_alert_critical_max_repeats: int | None = None
 
 
 class DashboardAutoRefreshUpdate(BaseModel):
@@ -213,7 +215,9 @@ _dashboard_refresh_last_error_at = 0
 DASHBOARD_REFRESH_INTERVALS = {300, 600, 1800}
 SMTP_ALERT_STATE_FILE = DATA_DIR / "smtp_alert_state.json"
 SMTP_ALERT_DEFAULT_MAX_REPEATS = 3
-SMTP_ALERT_DEFAULT_THRESHOLD = 5.0
+SMTP_ALERT_DEFAULT_THRESHOLD = 25.0
+SMTP_ALERT_DEFAULT_CRITICAL_THRESHOLD = 10.0
+SMTP_ALERT_DEFAULT_CRITICAL_MAX_REPEATS = 3
 SMTP_ALERT_DEFAULT_COOLDOWN_HOURS = 24.0
 SMTP_ALERT_SEND_TIMEOUT = 20
 _smtp_alert_lock = asyncio.Lock()
@@ -336,6 +340,20 @@ def _smtp_max_repeats(settings: dict[str, Any]) -> int:
     return value
 
 
+def _smtp_critical_max_repeats(settings: dict[str, Any]) -> int:
+    """Return a bounded critical repeat cap; malformed legacy settings fail closed."""
+    raw = settings.get("smtp_alert_critical_max_repeats", SMTP_ALERT_DEFAULT_CRITICAL_MAX_REPEATS)
+    if isinstance(raw, bool):
+        return SMTP_ALERT_DEFAULT_CRITICAL_MAX_REPEATS
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return SMTP_ALERT_DEFAULT_CRITICAL_MAX_REPEATS
+    if value < 1 or value > 100:
+        return SMTP_ALERT_DEFAULT_CRITICAL_MAX_REPEATS
+    return value
+
+
 def _recovered_account_ids(accounts: list[dict[str, Any]], threshold: float) -> set[str]:
     """Return accounts whose balance was positively observed above threshold."""
     recovered = set()
@@ -381,54 +399,135 @@ async def _send_low_balance_alerts(accounts: list[dict[str, Any]]) -> None:
             threshold = float(settings.get("smtp_alert_threshold", SMTP_ALERT_DEFAULT_THRESHOLD))
             cooldown_hours = float(settings.get("smtp_alert_cooldown_hours", SMTP_ALERT_DEFAULT_COOLDOWN_HOURS))
             max_repeats = _smtp_max_repeats(settings)
+            critical_threshold = float(settings.get("smtp_alert_critical_threshold", 0.0) or 0.0)
+            critical_max_repeats = _smtp_critical_max_repeats(settings)
         except (TypeError, ValueError):
             return
         if not math.isfinite(threshold) or threshold < 0 or not math.isfinite(cooldown_hours) or cooldown_hours < 0:
             return
+        if not math.isfinite(critical_threshold) or critical_threshold < 0:
+            critical_threshold = 0.0
+        if critical_threshold >= threshold:
+            critical_threshold = 0.0
+
         recipients = _parse_recipients(str(settings.get("smtp_alert_recipients", "")), "")
         if not recipients:
             try:
                 recipients = _parse_recipients("", _smtp_option_values().get("SMTPAccount", ""))
             except (OSError, sqlite3.Error):
                 return
-        low_rows = _low_balance_rows(accounts, threshold)
-        recovered_ids = _recovered_account_ids(accounts, threshold)
+
+        valid_accounts = []
+        recovered_warn_ids = set()
+        recovered_crit_ids = set()
+
+        for account in accounts:
+            account_id = str(account.get("id") or "").strip()
+            if account.get("virtual") or account_id == SELF_POOL_ACCOUNT_ID or not account_id:
+                continue
+            try:
+                balance = float(account.get("balance"))
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(balance):
+                continue
+            valid_accounts.append({
+                "id": account_id,
+                "name": str(account.get("name", "")),
+                "base_url": str(account.get("base_url", "")),
+                "balance": balance,
+            })
+            if balance > threshold:
+                recovered_warn_ids.add(account_id)
+            if critical_threshold > 0 and balance > critical_threshold:
+                recovered_crit_ids.add(account_id)
+
         now = time.time()
         state = _load_smtp_alert_state()
-        low_ids = {row["id"] for row in low_rows}
+
+        # 余额明确恢复时清零（查询失败不高危误清零）
         for account_id, entry in list(state.items()):
-            if account_id in recovered_ids and account_id not in low_ids and isinstance(entry, dict):
+            if not isinstance(entry, dict):
+                continue
+            if account_id in recovered_warn_ids:
                 entry["low"] = False
                 entry["repeat_count"] = 0
-        due = []
-        for row in low_rows:
+                entry["critical_low"] = False
+                entry["critical_repeat_count"] = 0
+            elif account_id in recovered_crit_ids:
+                entry["critical_low"] = False
+                entry["critical_repeat_count"] = 0
+
+        due_critical = []
+        due_warn = []
+
+        for row in valid_accounts:
             entry = state.setdefault(row["id"], {})
-            last_sent = float(entry.get("last_sent", 0) or 0)
-            repeat_count = int(entry.get("repeat_count", 0) or 0)
-            if repeat_count < max_repeats and (not entry.get("low", False) or now - last_sent >= cooldown_hours * 3600):
-                due.append(row)
-        if not due:
+            balance = row["balance"]
+
+            # 二档紧急告警判定
+            if critical_threshold > 0 and balance <= critical_threshold:
+                crit_repeats = int(entry.get("critical_repeat_count", 0) or 0)
+                crit_last = float(entry.get("critical_last_sent", 0) or 0)
+                crit_low = bool(entry.get("critical_low", False))
+                if crit_repeats < critical_max_repeats and (not crit_low or now - crit_last >= cooldown_hours * 3600):
+                    due_critical.append((row, crit_repeats + 1, critical_max_repeats))
+            # 一档预警告警判定
+            elif balance <= threshold:
+                warn_repeats = int(entry.get("repeat_count", 0) or 0)
+                warn_last = float(entry.get("last_sent", 0) or 0)
+                warn_low = bool(entry.get("low", False))
+                if warn_repeats < max_repeats and (not warn_low or now - warn_last >= cooldown_hours * 3600):
+                    due_warn.append((row, warn_repeats + 1, max_repeats))
+
+        if not due_critical and not due_warn:
             _save_smtp_alert_state(state)
             return
-        lines = [f"New API 渠道余额不足告警（阈值：{threshold:g}）", ""]
-        for row in due:
-            lines.append(f"渠道：{row['name']} | 余额：{row['balance']:g} | 地址：{row['base_url']}")
-        lines.append("")
+
+        if due_critical and due_warn:
+            subject = "【紧急】New API 渠道余额不足告警（含紧急与预警）"
+        elif due_critical:
+            subject = f"【紧急】New API 渠道余额不足告警（紧急阈值：{critical_threshold:g}）"
+        else:
+            subject = f"New API 渠道余额不足预警（预警阈值：{threshold:g}）"
+
+        lines = [subject, ""]
+        if due_critical:
+            lines.append(f"=== 紧急告警（余额 ≤ {critical_threshold:g}）===")
+            for row, curr, total in due_critical:
+                lines.append(f"渠道：{row['name']} | 余额：{row['balance']:g} | 地址：{row['base_url']} (第 {curr}/{total} 次)")
+            lines.append("")
+        if due_warn:
+            lines.append(f"=== 预警提醒（余额 ≤ {threshold:g}）===")
+            for row, curr, total in due_warn:
+                lines.append(f"渠道：{row['name']} | 余额：{row['balance']:g} | 地址：{row['base_url']} (第 {curr}/{total} 次)")
+            lines.append("")
         lines.append(f"检查时间：{datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S %z')}")
+
+        body_text = "\n".join(lines)
         try:
             await asyncio.wait_for(
-                asyncio.to_thread(_send_smtp_message, "New API 渠道余额不足告警", "\n".join(lines), recipients),
+                asyncio.to_thread(_send_smtp_message, subject, body_text, recipients),
                 timeout=SMTP_ALERT_SEND_TIMEOUT + 5,
             )
         except Exception as exc:
             print(f"SMTP 余额告警发送失败: {exc}")
             return
-        for row in due:
+
+        for row, curr, _ in due_critical:
             entry = state.setdefault(row["id"], {})
-            entry.update({"low": True, "last_sent": now, "repeat_count": int(entry.get("repeat_count", 0) or 0) + 1})
+            entry["critical_low"] = True
+            entry["critical_last_sent"] = now
+            entry["critical_repeat_count"] = curr
+            entry["low"] = True
+
+        for row, curr, _ in due_warn:
+            entry = state.setdefault(row["id"], {})
+            entry["low"] = True
+            entry["last_sent"] = now
+            entry["repeat_count"] = curr
+
         _save_smtp_alert_state(state)
-
-
 def _cache_get(key: str, ttl: int) -> Any | None:
     entry = _cache.get(key)
     if entry and (time.time() - entry["ts"]) < ttl:
@@ -1833,6 +1932,8 @@ async def get_settings():
             "smtp_alert_recipients": settings.get("smtp_alert_recipients", ""),
             "smtp_alert_cooldown_hours": settings.get("smtp_alert_cooldown_hours", SMTP_ALERT_DEFAULT_COOLDOWN_HOURS),
             "smtp_alert_max_repeats": _smtp_max_repeats(settings),
+            "smtp_alert_critical_threshold": settings.get("smtp_alert_critical_threshold", SMTP_ALERT_DEFAULT_CRITICAL_THRESHOLD),
+            "smtp_alert_critical_max_repeats": _smtp_critical_max_repeats(settings),
             "smtp_config": _smtp_config_status(),
         },
     }
@@ -1893,11 +1994,28 @@ async def update_settings(req: SettingsUpdate):
         settings["smtp_alert_cooldown_hours"] = round(req.smtp_alert_cooldown_hours, 4)
     if req.smtp_alert_max_repeats is not None:
         if req.smtp_alert_max_repeats < 1 or req.smtp_alert_max_repeats > 100:
-            raise HTTPException(status_code=422, detail="最大重复提醒次数必须在 1 到 100 之间")
+            raise HTTPException(status_code=422, detail="一档提醒次数必须在 1 到 100 之间")
         settings["smtp_alert_max_repeats"] = req.smtp_alert_max_repeats
     else:
-        # Normalize legacy/null values even when another setting is saved.
         settings["smtp_alert_max_repeats"] = _smtp_max_repeats(settings)
+    if req.smtp_alert_critical_threshold is not None:
+        if not math.isfinite(req.smtp_alert_critical_threshold) or req.smtp_alert_critical_threshold < 0 or req.smtp_alert_critical_threshold > 100000000:
+            raise HTTPException(status_code=422, detail="二档紧急阈值必须是 0 到 100000000 之间的有效数字")
+        warn_th = settings.get("smtp_alert_threshold", SMTP_ALERT_DEFAULT_THRESHOLD)
+        if req.smtp_alert_critical_threshold > 0 and req.smtp_alert_critical_threshold >= warn_th:
+            raise HTTPException(status_code=422, detail="二档紧急阈值必须小于一档预警阈值")
+        settings["smtp_alert_critical_threshold"] = round(req.smtp_alert_critical_threshold, 6)
+    if req.smtp_alert_critical_max_repeats is not None:
+        if req.smtp_alert_critical_max_repeats < 1 or req.smtp_alert_critical_max_repeats > 100:
+            raise HTTPException(status_code=422, detail="二档提醒次数必须在 1 到 100 之间")
+        settings["smtp_alert_critical_max_repeats"] = req.smtp_alert_critical_max_repeats
+    else:
+        settings["smtp_alert_critical_max_repeats"] = _smtp_critical_max_repeats(settings)
+    # 交叉检查一档下调导致倒挂
+    current_warn = settings.get("smtp_alert_threshold", SMTP_ALERT_DEFAULT_THRESHOLD)
+    current_crit = settings.get("smtp_alert_critical_threshold", 0.0)
+    if current_crit > 0 and current_crit >= current_warn:
+        raise HTTPException(status_code=422, detail="二档紧急阈值必须小于一档预警阈值")
     _save_settings(settings)
     return {"success": True, "message": "设置已保存"}
 

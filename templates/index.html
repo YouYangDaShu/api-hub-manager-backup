@@ -1520,16 +1520,24 @@ root.addEventListener('mask-channel-urls-change',()=>render());root.addEventList
                         </label>
                     </div>
                     <div class="field">
-                        <label for="s_smtp_alert_threshold">余额阈值</label>
-                        <input type="number" id="s_smtp_alert_threshold" min="0" step="0.01" value="5">
+                        <label for="s_smtp_alert_threshold">一档预警阈值</label>
+                        <input type="number" id="s_smtp_alert_threshold" min="0" step="0.01" value="25">
                     </div>
                     <div class="field">
-                        <label for="s_smtp_alert_cooldown">重复提醒间隔（小时）</label>
-                        <input type="number" id="s_smtp_alert_cooldown" min="0" step="1" value="24">
-                    </div>
-                    <div class="field">
-                        <label for="s_smtp_alert_max_repeats">最大重复提醒次数</label>
+                        <label for="s_smtp_alert_max_repeats">一档提醒次数</label>
                         <input type="number" id="s_smtp_alert_max_repeats" min="1" max="100" step="1" value="3">
+                    </div>
+                    <div class="field">
+                        <label for="s_smtp_alert_critical_threshold">二档紧急阈值</label>
+                        <input type="number" id="s_smtp_alert_critical_threshold" min="0" step="0.01" value="10" placeholder="0 表示不启用二档">
+                    </div>
+                    <div class="field">
+                        <label for="s_smtp_alert_critical_max_repeats">二档提醒次数</label>
+                        <input type="number" id="s_smtp_alert_critical_max_repeats" min="1" max="100" step="1" value="3">
+                    </div>
+                    <div class="field form-full">
+                        <label for="s_smtp_alert_cooldown">重复提醒间隔（小时）</label>
+                        <input type="number" id="s_smtp_alert_cooldown" min="0" step="0.1" value="0.1">
                     </div>
                     <div class="field form-full">
                         <label for="s_smtp_alert_recipients">收件人邮箱</label>
@@ -3237,9 +3245,19 @@ function getCategoryTag(cat) {
         const threshold = Number($('#s_smtp_alert_threshold').value);
         const cooldown = Number($('#s_smtp_alert_cooldown').value);
         const maxRepeats = Number($('#s_smtp_alert_max_repeats').value);
+        const critThreshold = Number($('#s_smtp_alert_critical_threshold').value || 0);
+        const critMaxRepeats = Number($('#s_smtp_alert_critical_max_repeats').value || 3);
         const recipients = $('#s_smtp_alert_recipients').value.trim();
         if (!Number.isFinite(threshold) || threshold < 0 || !Number.isFinite(cooldown) || cooldown < 0 || !Number.isInteger(maxRepeats) || maxRepeats < 1 || maxRepeats > 100) {
-            toast('阈值、重复提醒间隔和最大重复提醒次数必须有效', false);
+            toast('一档预警阈值、提醒间隔和提醒次数必须有效', false);
+            return;
+        }
+        if (!Number.isFinite(critThreshold) || critThreshold < 0 || !Number.isInteger(critMaxRepeats) || critMaxRepeats < 1 || critMaxRepeats > 100) {
+            toast('二档紧急阈值与提醒次数必须有效', false);
+            return;
+        }
+        if (critThreshold > 0 && critThreshold >= threshold) {
+            toast('二档紧急阈值必须小于一档预警阈值', false);
             return;
         }
         const btn = $('#btnSaveSmtpAlert');
@@ -3251,6 +3269,8 @@ function getCategoryTag(cat) {
                 smtp_alert_recipients: recipients,
                 smtp_alert_cooldown_hours: cooldown,
                 smtp_alert_max_repeats: maxRepeats,
+                smtp_alert_critical_threshold: critThreshold,
+                smtp_alert_critical_max_repeats: critMaxRepeats,
             });
             $('#smtpAlertStatus').innerHTML = '<span style="color:var(--success)">✓ 告警设置已保存</span>';
             toast('余额告警设置已保存');
@@ -3290,9 +3310,11 @@ function getCategoryTag(cat) {
             if (data.hub_api_key_set) $('#s_hub_api_key').placeholder = '已配置 (' + (data.hub_api_key_masked || '****') + ')';
             if (data.ultra_low_rate != null) $('#s_ultra_low_rate').value = data.ultra_low_rate;
             $('#s_smtp_alert_enabled').checked = data.smtp_alert_enabled === true;
-            $('#s_smtp_alert_threshold').value = data.smtp_alert_threshold ?? 5;
-            $('#s_smtp_alert_cooldown').value = data.smtp_alert_cooldown_hours ?? 24;
+            $('#s_smtp_alert_threshold').value = data.smtp_alert_threshold ?? 25;
             $('#s_smtp_alert_max_repeats').value = data.smtp_alert_max_repeats ?? 3;
+            $('#s_smtp_alert_critical_threshold').value = data.smtp_alert_critical_threshold ?? 10;
+            $('#s_smtp_alert_critical_max_repeats').value = data.smtp_alert_critical_max_repeats ?? 3;
+            $('#s_smtp_alert_cooldown').value = data.smtp_alert_cooldown_hours ?? 0.1;
             $('#s_smtp_alert_recipients').value = data.smtp_alert_recipients || '';
             const smtp = data.smtp_config || {};
             const smtpText = smtp.configured
