@@ -195,3 +195,46 @@ class SiteRevenueTests(unittest.TestCase):
             self.assertEqual(totals["matched_today"], 2.5)
             self.assertEqual(totals["site_today_revenue"], 2.5)
 
+    def test_key_matching_does_not_double_count_already_claimed_channel(self):
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "one-api.db"
+            ownership_path = Path(td) / "channel_ownership.json"
+            conn = sqlite3.connect(db_path)
+            conn.executescript(
+                """
+                CREATE TABLE options (key TEXT PRIMARY KEY, value TEXT);
+                CREATE TABLE channels (id INTEGER PRIMARY KEY, key TEXT);
+                CREATE TABLE logs (type INTEGER, channel_id INTEGER, quota INTEGER, created_at INTEGER);
+                INSERT INTO options VALUES ('QuotaPerUnit', '1000000');
+                INSERT INTO channels VALUES (128, 'sk-wawa-shared-key');
+                INSERT INTO logs VALUES (2, 128, 40000000, strftime('%s', 'now'));
+                """
+            )
+            conn.commit()
+            conn.close()
+            # 渠道 128 手动归属给 wawa-main
+            ownership_path.write_text(
+                '{"128": {"channel_id": "128", "owner_account_id": "wawa-main"}}',
+                encoding="utf-8",
+            )
+            summaries = [
+                {"id": "wawa-main", "upstream_key": "sk-main", "today_cost": 30.0},
+                {"id": "wawa-sub", "upstream_key": "sk-wawa-shared-key", "today_cost": 10.0},
+            ]
+            with patch.object(routes, "SITE_BILLING_DB", db_path), \
+                 patch.object(routes, "CHANNEL_OWNERSHIP_FILE", ownership_path), \
+                 patch.object(routes, "SITE_CHANNEL_IDS_BY_ACCOUNT", {}), \
+                 patch.object(routes, "_load_revenue_adjustments", return_value={}):
+                totals = routes._attach_site_revenue(summaries)
+
+            # 主号按 ID 认领 40.0
+            self.assertEqual(summaries[0]["site_revenue"], 40.0)
+            self.assertIn("手动归属", summaries[0]["site_revenue_status"])
+            # 副号虽然持有相同 Key，但渠道已被认领，绝不重复计算
+            self.assertEqual(summaries[1]["site_revenue"], 0.0)
+            self.assertIn("已按ID归属其他账号", summaries[1]["site_revenue_status"])
+            # 全站总收入和归属收入精确相等，不发生双计
+            self.assertEqual(totals["matched_today"], 40.0)
+            self.assertEqual(totals["site_today_revenue"], 40.0)
+
+

@@ -852,8 +852,9 @@ def _attach_site_revenue(account_summaries: list[dict[str, Any]]) -> dict[str, f
     for channel_id, owner in manual_owner_by_channel.items():
         if owner in account_ids:
             manual_channels_by_account[owner].append(channel_id)
-    matched_today = 0.0
-    matched_total = 0.0
+
+    # 1. 预先收集所有明确按渠道ID/手动归属认领的渠道，确保每个渠道全局只归属一次，坚决杜绝重复算账
+    claimed_channel_ids: set[int] = set()
     for summary in account_summaries:
         account_id = str(summary.get("id") or "")
         manual_channel_ids = manual_channels_by_account.get(account_id, [])
@@ -862,6 +863,24 @@ def _attach_site_revenue(account_summaries: list[dict[str, Any]]) -> dict[str, f
             mapped_channel_ids = tuple(dict.fromkeys(manual_channel_ids))
         else:
             mapped_channel_ids = tuple(dict.fromkeys(static_channel_ids + manual_channel_ids)) if (static_channel_ids or manual_channel_ids) else None
+        summary["_resolved_mapped_channel_ids"] = mapped_channel_ids
+        if mapped_channel_ids is not None:
+            for cid in mapped_channel_ids:
+                if manual_owner_by_channel.get(cid, account_id) == account_id:
+                    claimed_channel_ids.add(cid)
+
+    # 2. 未被按 ID 认领的渠道，才允许按 upstream_key 匹配
+    unclaimed_channels_by_key: dict[str, list[int]] = {}
+    for cid, key, _, _ in rows:
+        if key and cid not in claimed_channel_ids:
+            unclaimed_channels_by_key.setdefault(str(key), []).append(cid)
+
+    matched_today = 0.0
+    matched_total = 0.0
+    for summary in account_summaries:
+        account_id = str(summary.get("id") or "")
+        mapped_channel_ids = summary.pop("_resolved_mapped_channel_ids", None)
+        manual_channel_ids = manual_channels_by_account.get(account_id, [])
         if mapped_channel_ids is not None:
             today = sum(
                 revenue_by_channel.get(cid, (0.0, 0.0))[0]
@@ -881,8 +900,24 @@ def _attach_site_revenue(account_summaries: list[dict[str, Any]]) -> dict[str, f
             key = str(summary.get("upstream_key") or "")
             if not key:
                 continue
-            today, total = revenue_by_key.get(key, (0.0, 0.0))
-            match_status = "已按上游Key匹配" if key in revenue_by_key else "已匹配，今日无本站收入"
+            key_cids = unclaimed_channels_by_key.get(key, [])
+            if key_cids:
+                today = sum(
+                    revenue_by_channel.get(cid, (0.0, 0.0))[0]
+                    for cid in key_cids
+                    if cid not in daily_overrides
+                )
+                total = sum(
+                    revenue_by_channel.get(cid, (0.0, 0.0))[1]
+                    for cid in key_cids
+                )
+                for cid in key_cids:
+                    claimed_channel_ids.add(cid)
+                unclaimed_channels_by_key.pop(key, None)
+                match_status = "已按上游Key匹配"
+            else:
+                today, total = 0.0, 0.0
+                match_status = "已匹配，渠道已按ID归属其他账号" if key in revenue_by_key else "已匹配，今日无本站收入"
         override_today = override_today_by_account.get(account_id, 0.0)
         if override_today:
             today += override_today
