@@ -1221,14 +1221,17 @@ root.addEventListener('mask-channel-urls-change',()=>render());root.addEventList
                     background: var(--card-bg, #fff);
                     border: 1px solid var(--border);
                     border-radius: 14px;
-                    padding: 24px;
-                    max-width: 500px;
-                    width: 90%;
-                    box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+                    padding: 20px 24px;
+                    max-width: 760px;
+                    width: 92%;
+                    max-height: 90vh;
+                    box-shadow: 0 20px 40px rgba(0,0,0,0.18);
+                    display: flex;
+                    flex-direction: column;
                 }
                 .iq-modal-card h3 {
                     margin: 0 0 12px;
-                    font-size: 17px;
+                    font-size: 16px;
                     display: flex;
                     align-items: center;
                     justify-content: space-between;
@@ -1236,8 +1239,8 @@ root.addEventListener('mask-channel-urls-change',()=>render());root.addEventList
                 .iq-modal-row {
                     display: flex;
                     justify-content: space-between;
-                    margin-bottom: 8px;
-                    font-size: 13.5px;
+                    margin-bottom: 6px;
+                    font-size: 13px;
                 }
                 .iq-modal-row .k { color: var(--muted, #64748b); }
                 .iq-modal-row .v { font-weight: 600; }
@@ -1245,14 +1248,16 @@ root.addEventListener('mask-channel-urls-change',()=>render());root.addEventList
                     background: #f8fafc;
                     border: 1px solid var(--border);
                     border-radius: 8px;
-                    padding: 10px 12px;
-                    margin-top: 12px;
-                    font-size: 12.5px;
-                    line-height: 1.5;
-                    max-height: 180px;
+                    padding: 12px 14px;
+                    margin-top: 8px;
+                    font-size: 13px;
+                    line-height: 1.6;
+                    max-height: 52vh;
                     overflow-y: auto;
-                    color: var(--text);
-                    word-break: break-all;
+                    color: #1e293b;
+                    word-break: break-word;
+                    white-space: pre-wrap;
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
                 }
 
             </style>
@@ -5581,14 +5586,15 @@ function getCategoryTag(cat) {
             color = '#ff9500';
         }
 
+        const fullTextContent = item.full_text || item.summary || '无回复内容';
         const modal = document.createElement('div');
         modal.className = 'iq-modal-overlay';
         modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
         modal.innerHTML = `
             <div class="iq-modal-card">
                 <h3>
-                    <span>渠道 #${cid} · 智商检测详情</span>
-                    <button class="btn btn-ghost" style="padding:2px 8px;font-size:12px;" onclick="this.closest('.iq-modal-overlay').remove()">✕</button>
+                    <span style="font-weight:700;">渠道 #${cid} · 智商检测详情</span>
+                    <button class="btn btn-ghost" style="padding:2px 8px;font-size:12px;border:1px solid var(--border);" onclick="this.closest('.iq-modal-overlay').remove()">✕</button>
                 </h3>
                 <div class="iq-modal-row"><span class="k">检测时间</span><span class="v">${item.at || '-'}</span></div>
                 <div class="iq-modal-row"><span class="k">测试模型</span><span class="v">${item.model || '-'}</span></div>
@@ -5597,12 +5603,28 @@ function getCategoryTag(cat) {
                 <div class="iq-modal-row"><span class="k">判定结果</span><span class="v" style="color:${color};font-weight:700;">${statusText}</span></div>
                 <div class="iq-modal-row"><span class="k">提取答案</span><span class="v" style="color:${color};font-weight:700;font-size:15px;">${item.answer != null ? item.answer : '未提取到'}</span></div>
                 ${item.quota ? `<div class="iq-modal-row"><span class="k">消耗 Quota</span><span class="v">${item.quota}</span></div>` : ''}
-                ${item.prompt_tokens ? `<div class="iq-modal-row"><span class="k">Prompt / Completion</span><span class="v">${item.prompt_tokens} / ${item.completion_tokens}</span></div>` : ''}
-                <div style="margin-top:10px;font-size:12px;color:var(--muted,#64748b);font-weight:600;">模型完整回复内容:</div>
-                <div class="iq-modal-box" style="white-space:pre-wrap;word-break:break-word;max-height:260px;font-family:monospace;font-size:12px;">${(item.full_text || item.summary || '无回复内容').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+                ${item.prompt_tokens ? `<div class="iq-modal-row"><span class="k">Tokens</span><span class="v">输入 ${item.prompt_tokens} / 输出 ${item.completion_tokens}</span></div>` : ''}
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">
+                    <span style="font-size:12.5px;color:var(--muted,#64748b);font-weight:600;">大模型完整输出内容 (${fullTextContent.length} 字):</span>
+                    <button id="btnCopyIqText" class="btn btn-ghost" style="padding:2px 8px;font-size:11px;border:1px solid var(--border);border-radius:4px;cursor:pointer;">📋 复制全文</button>
+                </div>
+                <div class="iq-modal-box">${fullTextContent.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
             </div>
         `;
         document.body.appendChild(modal);
+
+        const copyBtn = modal.querySelector('#btnCopyIqText');
+        if (copyBtn) {
+            copyBtn.onclick = async () => {
+                try {
+                    await navigator.clipboard.writeText(fullTextContent);
+                    copyBtn.innerText = '✅ 已复制';
+                    setTimeout(() => { copyBtn.innerText = '📋 复制全文'; }, 2000);
+                } catch (err) {
+                    alert('复制失败，请手动选择复制');
+                }
+            };
+        }
     };
 
 </script>

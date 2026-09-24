@@ -20,7 +20,7 @@ QUESTION = """在一个黑色的袋子里放有三种口味的糖果，每种糖
 圆形 7 9 8
 五角星形 7 6 4
 
-请直接给出最终数字答案，并在最后一行明确写出【最终答案：XX】。"""
+请写出详细的分析推导与计算过程，并在最后一行明确写出【最终答案：XX】。"""
 
 def load_iq_state() -> dict[str, Any]:
     if not DATA_PATH.exists():
@@ -52,15 +52,24 @@ def is_channel_monitored_in_availability(cid: int) -> bool:
 def parse_answer(text: str) -> int | None:
     if not text:
         return None
-    m = re.search(r"最终答案[：:\s]*(\d+)", text)
+    # 1. 优先匹配明确的“最终答案”字样（支持加粗、括号、中英冒号、等号、中文介词等各种变体）
+    m = re.search(r"最终答案[^\d\n\r]{0,12}(\d{1,3})", text)
     if m:
         return int(m.group(1))
-    m2 = re.findall(r"(21|29)", text)
-    if m2:
-        return int(m2[-1])
-    m3 = re.findall(r"(\d{1,3})", text[-100:])
-    if m3:
-        return int(m3[-1])
+    # 2. 匹配“答案是/为/：XX”或“最少取出/摸出/需要 XX 个/颗”
+    m_near = re.search(r"(?:最少|至少|需要|取出|摸出|拿出|答案)[^\d\n\r]{0,10}(\d{1,3})[^\d\n\r]{0,4}(?:个|颗|糖)?", text[-400:])
+    if m_near:
+        val = int(m_near.group(1))
+        if val in (21, 29):
+            return val
+    # 3. 针对 21 或 29 的反向优先扫描（在末尾 400 字符内寻找 21 或 29，避免 \b 在中文失效）
+    m_candidates = re.findall(r"(?<!\d)(21|29)(?!\d)", text[-400:])
+    if m_candidates:
+        return int(m_candidates[-1])
+    # 4. 兜底：抓取末尾最后出现的 1~3 位独立整数
+    m_fallback = re.findall(r"(?<!\d)(\d{1,3})(?!\d)", text[-150:])
+    if m_fallback:
+        return int(m_fallback[-1])
     return None
 
 def run_single_iq_test(cid: int, model: str | None = None) -> dict[str, Any]:
@@ -158,9 +167,20 @@ def run_single_iq_test(cid: int, model: str | None = None) -> dict[str, Any]:
 
     dur = round(time.time() - t0, 2)
     if data:
-        msg = data.get("choices", [{}])[0].get("message", {})
-        content = msg.get("content", "")
-        reasoning = msg.get("reasoning_content", "") or msg.get("reasoning", "")
+        choices = data.get("choices", [])
+        msg = choices[0].get("message", {}) if choices else {}
+        raw_content = msg.get("content") or (choices[0].get("text") if choices else "") or ""
+        if isinstance(raw_content, list):
+            content = "".join([b.get("text", "") for b in raw_content if isinstance(b, dict) and b.get("type") == "text"])
+        else:
+            content = str(raw_content)
+
+        raw_reasoning = msg.get("reasoning_content") or msg.get("reasoning") or msg.get("thought") or ""
+        if isinstance(raw_reasoning, list):
+            reasoning = "".join([str(b) for b in raw_reasoning])
+        else:
+            reasoning = str(raw_reasoning)
+
         full_text = content
         if reasoning and reasoning.strip():
             full_text = f"[思考过程]\n{reasoning.strip()}\n\n[最终回答]\n{content.strip()}"
