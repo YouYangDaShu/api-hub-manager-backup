@@ -44,10 +44,10 @@ def is_channel_monitored_in_availability(cid: int) -> bool:
         import channel_monitor
         for ch in channel_monitor.list_channels():
             if int(ch.get("id")) == int(cid):
-                return bool(ch.get("monitor_enabled", True) and ch.get("category_enabled", True) and (ch.get("monitor_global_enabled") is not False))
+                return bool(ch.get("channel_enabled") and ch.get("monitor_enabled") and ch.get("category_enabled") and (ch.get("monitor_global_enabled") is not False))
         return False
     except Exception:
-        return True
+        return False
 
 def parse_answer(text: str) -> int | None:
     if not text:
